@@ -1,28 +1,31 @@
 :root {
   font-family: "Plus Jakarta Sans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  color: #19182a;
-  background: #f7f7fb;
+  color: #132833;
+  background: #f5f7f7;
   font-synthesis: none;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  --bg: #f7f7fb;
+  --bg: #f5f7f7;
   --card: #ffffff;
-  --card-hover: #fbfaff;
-  --muted: #6b6b83;
-  --muted-light: #a0a0b5;
-  --border: #e5e5f0;
-  --border-focus: #6366f1;
-  --dark: #19182a;
-  --dark-surface: #292744;
-  --primary: #4f46e5;
-  --primary-hover: #4338ca;
-  --primary-soft: #eef2ff;
-  --primary-text: #3730a3;
-  --good: #0284c7;
-  --warn: #b45309;
-  --warn-soft: #fff7ed;
-  --bad: #be123c;
-  --bad-soft: #fff1f2;
+  --card-hover: #f8fafb;
+  --muted: #68747b;
+  --muted-light: #9ba3a5;
+  --border: #dde4e7;
+  --border-focus: #294b60;
+  --dark: #132833;
+  --dark-surface: #203b48;
+  --primary: #294b60;
+  --primary-hover: #1c394b;
+  --primary-soft: #eaf0f3;
+  --primary-text: #244457;
+  --accent: #b8a06b;
+  --accent-soft: #f3efe5;
+  --accent-text: #705a30;
+  --good: #2b7186;
+  --warn: #a85d2d;
+  --warn-soft: #fff1e3;
+  --bad: #a8464d;
+  --bad-soft: #fbeded;
   --radius-sm: 8px;
   --radius: 12px;
   --radius-lg: 16px;
@@ -68,7 +71,7 @@ button {
   top: 0;
   height: 100vh;
   overflow-y: auto;
-  border-right: 1px solid #28263f;
+  border-right: 1px solid #29424c;
 }
 
 .brand {
@@ -123,9 +126,10 @@ button {
   color: #fff;
 }
 .nav.active {
-  background: #373363;
+  background: var(--dark-surface);
   color: #ffffff;
   font-weight: 700;
+  box-shadow: inset 2px 0 0 var(--accent);
 }
 .nav-icon {
   font-size: 14px;
@@ -142,19 +146,22 @@ button {
   color: #cbd5e1;
   font-size: 11px;
   line-height: 1.45;
-  border: 1px solid #373559;
+  border: 1px solid #34535e;
 }
 .side-user-meta {
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
+.side-user-meta .muted {
+  color: #b6c5cd;
+}
 
 .household-switcher select {
   width: 100%;
   background: var(--dark-surface);
   color: #fff;
-  border: 1px solid #373559;
+  border: 1px solid #34535e;
   border-radius: var(--radius-sm);
   padding: 7px 10px;
   font-size: 12px;
@@ -297,7 +304,7 @@ button.primary, a.primary {
   padding: 8px 14px;
   font-size: 12px;
   font-weight: 700;
-  box-shadow: 0 1px 2px rgba(4, 120, 87, 0.2);
+  box-shadow: 0 1px 2px rgba(19, 40, 51, 0.16);
   transition: all 0.15s ease;
   white-space: nowrap;
 }
@@ -400,8 +407,8 @@ button.danger:hover {
   margin-top: 3px;
 }
 .pill.badge-admin {
-  background: #f3e8ff;
-  color: #6b21a8;
+  background: var(--accent-soft);
+  color: var(--accent-text);
 }
 .pill.badge-active {
   background: var(--primary-soft);
@@ -415,7 +422,7 @@ button.danger:hover {
 /* Progress bar */
 .progress {
   height: 6px;
-  background: #e5e5f0;
+  background: var(--border);
   border-radius: 999px;
   overflow: hidden;
   position: relative;
@@ -437,7 +444,7 @@ button.danger:hover {
   line-height: 1.45;
   background: #ffffff;
   border: 1px solid var(--border);
-  color: #33334d;
+  color: var(--dark);
 }
 .insight.good {
   background: #f0f9ff;
@@ -535,7 +542,7 @@ button.danger:hover {
 .goal-settings {
   margin-top: 6px;
   padding: 10px 12px;
-  background: #fbfbfe;
+  background: var(--card-hover);
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
 }
@@ -588,7 +595,7 @@ input, select, textarea {
 }
 input:focus, select:focus, textarea:focus {
   border-color: var(--border-focus);
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.12);
+  box-shadow: 0 0 0 3px rgba(41, 75, 96, 0.14);
 }
 input::placeholder {
   color: #94a3b8;
@@ -627,7 +634,7 @@ input::placeholder {
 .search-select.open .search-select-trigger,
 .search-select-trigger:focus-visible {
   border-color: var(--border-focus);
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.12);
+  box-shadow: 0 0 0 3px rgba(41, 75, 96, 0.14);
 }
 .search-select-value {
   white-space: nowrap;
@@ -780,7 +787,7 @@ dialog::backdrop {
   font-size: 12px;
 }
 .user-table th {
-  background: #f9f9fd;
+  background: var(--card-hover);
   padding: 9px 12px;
   font-weight: 700;
   color: var(--muted);
@@ -807,7 +814,9 @@ dialog::backdrop {
   display: grid;
   place-items: center;
   padding: 16px;
-  background: radial-gradient(circle at top right, #e0e7ff, #f7f7fb 55%, #fce7f3);
+  background-color: var(--bg);
+  background-image: linear-gradient(rgba(19, 40, 51, 0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(19, 40, 51, 0.025) 1px, transparent 1px);
+  background-size: 32px 32px;
 }
 .auth-card {
   width: min(100%, 380px);
@@ -876,8 +885,8 @@ dialog::backdrop {
 }
 .code-box {
   padding: 9px 12px;
-  background: #18182b;
-  color: #f7f7fb;
+  background: #0d1b23;
+  color: var(--bg);
   border-radius: var(--radius-sm);
   word-break: break-all;
   font-family: "DM Mono", monospace;
@@ -1042,7 +1051,7 @@ dialog::backdrop {
   color: var(--dark);
 }
 .search-select-option:hover, .search-select-option.focused {
-  background: #f4f4fa;
+  background: var(--card-hover);
 }
 .search-select-option[aria-selected="true"] {
   background: var(--primary-soft);
