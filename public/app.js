@@ -1,18 +1,20 @@
-import { bindMoneyInputs, formatMoneyInput, numericAmount } from "./money.js";
-import { closeSelects, icon, searchableSelect } from "./ui.js";
+import { bindMoneyInputs, numericAmount } from "./money.js";
+import { closeSelects, icon } from "./ui.js";
+import { localDateValue } from "./forms.js";
+import { renderGoals as renderGoalsView } from "./views/goals.js";
+import { renderSettings as renderSettingsView } from "./views/settings.js";
+import { createTransactionDialog } from "./components/transaction-dialog.js";
 
 let me = null,
+  txDialog = null,
   snapshot = null,
   currentView = "dashboard",
   activeHouseholdId = "",
   pollTimer = null,
   eventSource = null,
   snapshotRequestId = 0,
-  currentMonth = new Date().toISOString().slice(0, 7),
+  currentMonth = localDateValue().slice(0, 7),
   pendingJoin = new URLSearchParams(location.search).get("join"),
-  categoryControl = null,
-  goalControl = null,
-  paidByControl = null,
   editingUserId = null;
 const app = document.querySelector("#app"),
   authScreen = document.querySelector("#authScreen"),
@@ -88,7 +90,7 @@ function showAuth() {
   renderAuth();
 }
 function renderAuth() {
-  authScreen.innerHTML = `<div class="auth-card"><div class="auth-brand"><img src="/favicon.svg" alt="" class="brand-mark" style="width:36px;height:36px"><div><b style="font-size:16px;color:#132833">BudgetKu</b><div class="kicker">Family money tracker</div></div></div><h1>Masuk ke Dashboard</h1><form id="loginForm"><label>Email<input name="email" type="email" autocomplete="username" placeholder="admin@budgetku.local" required></label><label>Password<input name="password" type="password" autocomplete="current-password" placeholder="••••••••" required></label><button class="primary wide"><span class="button-icon">${icon("shield")}</span><span>Masuk</span></button></form><div id="authError" class="insight bad hidden" style="margin-top:12px"></div></div>`;
+  authScreen.innerHTML = `<div class="auth-card"><div class="auth-brand"><img src="/favicon.svg" alt="" class="brand-mark" style="width:36px;height:36px"><div><b style="font-size:16px;color:#132833">BudgetKu</b><div class="kicker">Family money tracker</div></div></div><h1>Masuk ke Dashboard</h1><form id="loginForm"><label>Email<input name="email" type="email" autocomplete="username" placeholder="admin@budgetku.local" required></label><label>Password<input name="password" type="password" autocomplete="current-password" placeholder="••••••••" required></label><button type="submit" class="primary wide"><span class="button-icon">${icon("shield")}</span><span>Masuk</span></button></form><div id="authError" class="insight bad hidden" style="margin-top:12px"></div></div>`;
   document
     .querySelector("#loginForm")
     ?.addEventListener("submit", async (e) => {
@@ -342,48 +344,20 @@ function renderBudget() {
   };
 }
 function renderGoals() {
-  app.innerHTML = `<div class="content"><div class="card"><div class="section-title"><div><h3>Target keluarga</h3><p>Setoran tabungan mengurangi sisa penghasilan dan otomatis menambah progres goal.</p></div><button id="saveGoals" class="primary"><span class="button-icon">${icon("save")}</span><span>Simpan target</span></button></div>${snapshot.goals.map((goal) => {
-    const progress = pct(goal.current, goal.target);
-    return `<div class="goal-row" data-id="${goal.id}">
-      <div class="goal-summary"><div><h3>${esc(goal.name)}</h3><div class="small muted">${goal.target_date ? `Target ${esc(goal.target_date)}` : "Tabungan keluarga"}</div></div><button type="button" class="secondary" data-save-goal="${goal.id}"><span class="button-icon">${icon("plus")}</span><span>Tabung</span></button></div>
-      <div class="goal-total"><div><div class="small muted">Terkumpul otomatis</div><strong>${rupiah(goal.current)}</strong><span class="small muted"> / ${rupiah(goal.target)}</span></div><span class="pill">${progress}%</span></div>
-      <div class="progress" role="progressbar" aria-label="Progres ${esc(goal.name)}" aria-valuenow="${Math.min(100, progress)}" aria-valuemin="0" aria-valuemax="100"><span style="width:${Math.min(100, progress)}%"></span></div>
-      <div class="small muted">Saldo awal ${rupiah(goal.initial_balance)} + setoran tercatat ${rupiah(goal.contributed)}</div>
-      <details class="goal-settings"><summary><span class="button-icon">${icon("settings")}</span> Sesuaikan target &amp; saldo awal</summary><div class="goal-fields">
-        <label>Nama goal<input class="goal-name" maxlength="60" required value="${esc(goal.name)}"></label>
-        <label>Target (Rp)<input class="goal-target money-input" inputmode="numeric" autocomplete="off" value="${goal.target}"></label>
-        <label>Saldo awal (Rp)<input class="goal-initial money-input" inputmode="numeric" autocomplete="off" value="${goal.initial_balance}"></label>
-        <label>Tanggal target<input class="goal-date" type="date" value="${esc(goal.target_date || "")}"></label>
-      </div><p class="small muted" style="margin-top:6px">Saldo awal hanya untuk tabungan sebelum memakai aplikasi, bukan setoran baru.</p></details>
-    </div>`;
-  }).join("")}</div></div>`;
-  bindMoneyInputs(app);
-  app.querySelectorAll("[data-save-goal]").forEach((button) => {
-    button.onclick = () => {
-      const goal = snapshot.goals.find((item) => item.id === button.dataset.saveGoal);
-      const category = categoryForGoal(goal.id);
-      openTx({ type: "expense", note: `Tabungan ${goal.name}`, categoryId: category?.id || "", goalId: goal.id });
-    };
+  renderGoalsView(app, {
+    snapshot,
+    rupiah,
+    pct,
+    api,
+    toast,
+    refresh: () => refreshSnapshot(),
+    onSaveGoal: (goalId) => {
+      const goal = snapshot.goals.find((item) => item.id === goalId);
+      openTx({ type: "expense", note: `Tabungan ${goal.name}`, goalId: goal.id });
+    },
   });
-  document.querySelector("#saveGoals").onclick = async () => {
-    try {
-      if (![...app.querySelectorAll(".money-input")].every((input) => input.reportValidity())) return;
-      const goals = [...document.querySelectorAll(".goal-row")].map((r) => ({
-        id: r.dataset.id,
-        name: r.querySelector(".goal-name").value,
-        target: numericAmount(r.querySelector(".goal-target").value),
-        initial_balance: numericAmount(r.querySelector(".goal-initial").value),
-        target_date: r.querySelector(".goal-date").value || null,
-      }));
-      await api("/api/goals", { method: "PUT", body: JSON.stringify({ goals }) });
-      toast("Goals tersimpan");
-      await refreshSnapshot().catch(() => {});
-    } catch (error) {
-      toast(error.message);
-    }
-  };
 }
-async function renderReceipts() {
+function renderReceipts() {
   app.innerHTML = `<div class="content"><div class="grid two"><div class="card"><div class="section-title"><div><h3>Scan nota</h3><p>OCR di browser, foto disimpan ke server setelah kamu review.</p></div></div><div class="receipt-drop"><input id="receiptFile" type="file" accept="image/*" capture="environment"><div id="ocrStatus" class="small muted" style="margin-top:10px">Foto / upload struk. Hasil OCR perlu direview.</div></div></div><div class="card"><div class="section-title"><div><h3>Gmail import</h3><p>Setiap member connect Gmail masing-masing, read-only.</p></div></div><div id="gmailBox">Mengecek...</div></div></div><div class="card" style="margin-top:16px"><h3>Kandidat Gmail</h3><div id="gmailCandidates" class="empty">Belum dimuat.</div></div></div>`;
   document.querySelector("#receiptFile").onchange = handleReceipt;
   loadGmailStatus();
@@ -634,169 +608,16 @@ function openUserDialog(userData = null) {
   dialog.showModal();
 }
 function renderSettings() {
-  app.innerHTML = `<div class="content"><div class="grid two"><div class="card"><div class="section-title"><div><h3>Household settings</h3><p>Batas guardrail pengeluaran untuk alarm cashflow keluarga.</p></div></div><label>Nama household<input id="hhName" value="${esc(snapshot.household.name)}"></label><label style="margin-top:12px">Guardrail pengeluaran bulanan (Rp)<input id="monthlyLimit" class="money-input" inputmode="numeric" autocomplete="off" value="${snapshot.household.monthly_limit}"></label><button id="saveSettings" class="primary" style="margin-top:14px"><span class="button-icon">${icon("save")}</span><span>Simpan Pengaturan</span></button></div><div class="card"><div class="section-title"><div><h3>Keamanan Akun</h3><p>Ganti password untuk akun yang sedang login.</p></div></div><form id="changePasswordForm"><label>Password saat ini<input name="currentPassword" type="password" required></label><label style="margin-top:10px">Password baru<input name="nextPassword" type="password" minlength="12" required placeholder="Minimal 12 karakter"></label><button class="secondary" style="margin-top:14px"><span class="button-icon">${icon("key")}</span><span>Ganti Password</span></button></form></div>${me.user.is_superadmin ? `<div class="card"><div class="section-title"><div><h3>Integrasi Google</h3><p>Atur Gmail read-only tanpa perlu mengedit <code>.env</code>.</p></div></div><form id="googleSettingsForm"><label>Google Client ID<input id="googleClientId" name="clientId" autocomplete="off" required></label><label style="margin-top:10px">Google Client Secret<input id="googleClientSecret" name="clientSecret" type="password" autocomplete="new-password" placeholder="Kosongkan jika tidak berubah"></label><label style="margin-top:10px">Redirect URI<input id="googleRedirectUri" name="redirectUri" autocomplete="url" required></label><div id="googleSettingsStatus" class="small muted" style="margin-top:10px">Memuat konfigurasi...</div><div class="actions" style="margin-top:14px"><button class="primary" type="submit"><span class="button-icon">${icon("save")}</span><span>Simpan Integrasi</span></button><button class="danger" type="button" id="clearGoogleSettings">Hapus Konfigurasi</button></div></form></div>` : ""}</div></div>`;
-  bindMoneyInputs(app);
-  document.querySelector("#changePasswordForm")?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    try {
-      await api("/api/account/password", {
-        method: "PUT",
-        body: JSON.stringify({ currentPassword: form.get("currentPassword"), password: form.get("nextPassword") }),
-      });
-      event.currentTarget.reset();
-      toast("Password berhasil diganti");
-    } catch (error) {
-      toast(error.message);
-    }
+  renderSettingsView(app, {
+    snapshot,
+    user: me.user,
+    api,
+    toast,
+    onWorkspaceSaved: () => refreshSnapshot(),
   });
-  document.querySelector("#saveSettings").onclick = async () => {
-    try {
-      if (!document.querySelector("#monthlyLimit").reportValidity()) return;
-      await api("/api/household", {
-        method: "PUT",
-        body: JSON.stringify({
-          name: document.querySelector("#hhName").value,
-          monthlyLimit: numericAmount(document.querySelector("#monthlyLimit").value),
-        }),
-      });
-      toast("Settings tersimpan");
-      await refreshSnapshot().catch(() => {});
-    } catch (error) {
-      toast(error.message);
-    }
-  };
-  if (me.user.is_superadmin) loadGoogleSettings();
-}
-
-async function loadGoogleSettings() {
-  const form = document.querySelector("#googleSettingsForm");
-  if (!form) return;
-  const status = document.querySelector("#googleSettingsStatus");
-  try {
-    const settings = await api("/api/admin/integrations/google");
-    form.elements.clientId.value = settings.clientId || "";
-    form.elements.redirectUri.value = settings.redirectUri || `${location.origin}/auth/google/callback`;
-    status.textContent = settings.configured ? "Google OAuth aktif. Secret tersimpan dan tidak ditampilkan." : "Belum dikonfigurasi.";
-  } catch (error) {
-    status.textContent = error.message;
-  }
-  form.onsubmit = async (event) => {
-    event.preventDefault();
-    const data = new FormData(form);
-    try {
-      await api("/api/admin/integrations/google", {
-        method: "PUT",
-        body: JSON.stringify(Object.fromEntries(data)),
-      });
-      status.textContent = "Google OAuth aktif. Secret tersimpan dan tidak ditampilkan.";
-      toast("Integrasi Google tersimpan");
-    } catch (error) {
-      status.textContent = error.message;
-    }
-  };
-  document.querySelector("#clearGoogleSettings").onclick = async () => {
-    if (!confirm("Hapus konfigurasi Google OAuth?")) return;
-    try {
-      await api("/api/admin/integrations/google", { method: "DELETE" });
-      form.reset();
-      form.elements.redirectUri.value = `${location.origin}/auth/google/callback`;
-      status.textContent = "Konfigurasi dihapus.";
-      toast("Konfigurasi Google dihapus");
-    } catch (error) {
-      status.textContent = error.message;
-    }
-  };
 }
 function openTx(prefill = {}) {
-  const d = document.querySelector("#txDialog"),
-    f = document.querySelector("#txForm");
-  f.reset();
-  f.type.value = prefill.type || "expense";
-  f.amount.value = formatMoneyInput(prefill.amount || "");
-  f.note.value = prefill.note || "";
-  f.date.value = prefill.date || new Date().toISOString().slice(0, 10);
-  f.source.value = prefill.source || "manual";
-  f.receiptUrl.value = prefill.receiptUrl || "";
-  f.externalRef.value = prefill.externalRef || "";
-  f.need.checked = true;
-  setupFormSelects();
-  if (prefill.categoryId !== undefined && categoryControl) categoryControl.value = prefill.categoryId;
-  if (prefill.goalId !== undefined && goalControl) goalControl.value = prefill.goalId || "";
-  else syncGoalFromCategory();
-  syncTypeButtons();
-  bindMoneyInputs(f);
-  d.showModal();
-}
-function setupFormSelects() {
-  const catContainer = document.querySelector("#categorySelect");
-  const catOptions = [{ value: "", label: "Tanpa kategori" }, ...snapshot.categories.map((c) => ({ value: c.id, label: c.name }))];
-  categoryControl = searchableSelect(catContainer, {
-    name: "category",
-    label: "Kategori",
-    options: catOptions,
-    value: snapshot.categories[0]?.id || "",
-    onChange: () => syncGoalFromCategory(),
-  });
-
-  const goalContainer = document.querySelector("#goalSelect");
-  const goalOptions = [{ value: "", label: "Bukan setoran goal" }, ...snapshot.goals.map((g) => ({ value: g.id, label: `Tabungan ${g.name}` }))];
-  goalControl = searchableSelect(goalContainer, {
-    name: "goalId",
-    label: "Goal",
-    options: goalOptions,
-    value: "",
-    onChange: (selectedGoalId) => {
-      const cat = categoryForGoal(selectedGoalId);
-      if (cat && categoryControl) categoryControl.value = cat.id;
-      syncGoalHint();
-    },
-  });
-
-  const paidByContainer = document.querySelector("#paidBySelect");
-  const paidByOptions = [{ value: "shared", label: "Shared (Bersama)" }, ...snapshot.members.map((m) => ({ value: m.id, label: m.name }))];
-  paidByControl = searchableSelect(paidByContainer, {
-    name: "paidBy",
-    label: "Dibayar oleh",
-    options: paidByOptions,
-    value: "shared",
-  });
-}
-function categoryForGoal(goalId) {
-  const goal = snapshot.goals.find((item) => item.id === goalId);
-  if (!goal) return null;
-  const matches = snapshot.categories.filter((category) => category.name.trim().toLowerCase() === `target ${goal.name.trim().toLowerCase()}`);
-  return matches.length === 1 ? matches[0] : null;
-}
-function syncGoalFromCategory() {
-  const form = document.querySelector("#txForm");
-  const catVal = categoryControl ? categoryControl.value : form.category?.value;
-  const category = snapshot.categories.find((item) => item.id === catVal);
-  const matches = snapshot.goals.filter((goal) => category?.name.trim().toLowerCase() === `target ${goal.name.trim().toLowerCase()}`);
-  const nextGoalId = form.type.value === "expense" && matches.length === 1 ? matches[0].id : "";
-  if (goalControl) goalControl.value = nextGoalId;
-  syncGoalHint();
-}
-function syncGoalHint() {
-  const goalId = goalControl ? goalControl.value : "";
-  document.querySelector("#goalHint").textContent = goalId
-    ? "Setoran ini mengurangi sisa penghasilan sekali dan menambah saldo goal."
-    : "Pengeluaran biasa tidak menambah saldo goal.";
-}
-function syncTypeButtons() {
-  const f = document.querySelector("#txForm"),
-    val = f.type.value;
-  document
-    .querySelectorAll(".type-btn")
-    .forEach((b) => b.classList.toggle("active", b.dataset.type === val));
-  document.querySelector(".category-row").style.display =
-    val === "income" ? "none" : "grid";
-  document.querySelector(".need-row").style.display =
-    val === "income" ? "none" : "flex";
-  document.querySelector(".goal-allocation-row").style.display =
-    val === "income" ? "none" : "grid";
-  if (val === "income" && goalControl) goalControl.value = "";
-  syncGoalHint();
+  txDialog?.open(prefill);
 }
 function bindCommon() {
   document.querySelector("#addTx2")?.addEventListener("click", () => openTx());
@@ -852,51 +673,14 @@ document.querySelector("#quickAdd").innerHTML = icon("plus");
 document.querySelector("#quickAdd").title = "Catat transaksi";
 document.querySelector("#quickAdd").setAttribute("aria-label", "Catat transaksi");
 document.querySelector("#quickAdd").classList.add("quick-add");
-document.querySelector("#txForm button[value=cancel]").innerHTML = icon("close");
-document.querySelector("#txForm button[value=default] .button-icon").innerHTML = icon("check");
-document.querySelectorAll(".type-btn").forEach(
-  (b) =>
-    (b.onclick = () => {
-      document.querySelector("#txForm input[name=type]").value = b.dataset.type;
-      if (b.dataset.type === "expense") syncGoalFromCategory();
-      syncTypeButtons();
-    }),
-);
-document.querySelector("#txForm").addEventListener("submit", async (e) => {
-  if (e.submitter?.value === "cancel") return;
-  e.preventDefault();
-  const f = new FormData(e.currentTarget),
-    type = f.get("type"),
-    button = e.currentTarget.querySelector("button.primary");
-  if (button.disabled) return;
-  button.disabled = true;
-  try {
-    const amount = numericAmount(f.get("amount"));
-    if (amount <= 0) throw new Error("Nominal transaksi harus lebih dari 0.");
-    await api("/api/transactions", {
-      method: "POST",
-      body: JSON.stringify({
-        type,
-        amount,
-        note: String(f.get("note")),
-        categoryId: type === "income" ? null : String(f.get("category")) || null,
-        goalId: type === "income" ? null : String(f.get("goalId")) || null,
-        date: String(f.get("date")),
-        need: type === "income" ? false : Boolean(f.get("need")),
-        paidBy: String(f.get("paidBy")),
-        source: String(f.get("source")),
-        receiptUrl: String(f.get("receiptUrl")) || null,
-        externalRef: String(f.get("externalRef")) || null,
-      }),
-    });
-    document.querySelector("#txDialog").close();
+txDialog = createTransactionDialog({
+  dialog: document.querySelector("#txDialog"),
+  getSnapshot: () => snapshot,
+  save: (payload) => api("/api/transactions", { method: "POST", body: JSON.stringify(payload) }),
+  onSaved: async () => {
     toast("Transaksi tersimpan");
     await refreshSnapshot().catch(() => {});
-  } catch (err) {
-    toast(err.message);
-  } finally {
-    button.disabled = false;
-  }
+  },
 });
 if ("serviceWorker" in navigator)
   navigator.serviceWorker.register("/sw.js").catch(() => {});

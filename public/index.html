@@ -43,22 +43,38 @@
     </main>
   </div>
 
-  <dialog id="txDialog">
-    <form method="dialog" id="txForm" class="dialog-card">
-      <div class="dialog-head"><div><div class="kicker">Catat cashflow</div><h3>Tambah transaksi</h3></div><button value="cancel" formnovalidate class="icon-btn" aria-label="Tutup dialog" title="Tutup">×</button></div>
-      <div class="segmented"><button type="button" data-type="expense" class="type-btn active">Pengeluaran</button><button type="button" data-type="income" class="type-btn">Pemasukan</button></div>
+  <dialog id="txDialog" aria-labelledby="txDialogTitle">
+    <form method="dialog" id="txForm" class="dialog-card form-stack" novalidate>
+      <div class="dialog-head">
+        <h3 id="txDialogTitle">Tambah transaksi</h3>
+        <button value="cancel" type="button" data-dialog-close class="icon-btn" aria-label="Tutup dialog" title="Tutup dialog" data-icon="close"></button>
+      </div>
+      <div class="segmented" role="group" aria-label="Jenis transaksi">
+        <button type="button" data-type="expense" class="type-btn active" aria-pressed="true">Pengeluaran</button>
+        <button type="button" data-type="income" class="type-btn" aria-pressed="false">Pemasukan</button>
+      </div>
       <input type="hidden" name="type" value="expense" />
-      <label>Nominal (Rp)<input name="amount" class="money-input" inputmode="numeric" placeholder="150.000" autocomplete="off" required /></label>
-      <label>Nama / catatan<input name="note" placeholder="Belanja bulanan" required /></label>
-      <label class="category-row">Kategori<div id="categorySelect" class="search-select" data-name="category"></div></label>
-      <label class="goal-allocation-row">Alokasi tabungan / goal (opsional)<div id="goalSelect" class="search-select" data-name="goalId" aria-describedby="goalHint"></div><span id="goalHint" class="small muted field-help"></span></label>
-      <label>Tanggal<input name="date" type="date" required /></label>
-      <label>Dibayar oleh<div id="paidBySelect" class="search-select" data-name="paidBy"></div></label>
-      <label class="check need-row"><input name="need" type="checkbox" checked /> Ini kebutuhan, bukan keinginan</label>
+      <div class="form-grid transaction-grid">
+        <label for="txAmount">Nominal (Rp)<input id="txAmount" name="amount" class="money-input" inputmode="numeric" placeholder="150.000" autocomplete="off" required /></label>
+        <label for="txDate">Tanggal<input id="txDate" name="date" type="date" required /></label>
+      </div>
+      <label for="txNote">Nama / catatan<input id="txNote" name="note" placeholder="Belanja bulanan" maxlength="255" required /></label>
+      <div class="form-grid transaction-grid">
+        <div class="category-row form-stack"><label for="txCategory">Kategori</label><div id="categorySelect"></div></div>
+        <div class="paid-by-row form-stack"><label id="paidByLabel" for="txPaidBy">Dibayar oleh</label><div id="paidBySelect"></div></div>
+      </div>
+      <div class="goal-allocation-row form-stack"><label for="txGoal">Alokasi tabungan (opsional)</label><div id="goalSelect"></div><span id="goalHint" class="field-help" role="status" aria-live="polite"></span></div>
+      <div class="need-row field-choice-card"><label class="check" for="txNeed"><input id="txNeed" name="need" type="checkbox" checked /><span>Tandai sebagai kebutuhan</span></label><span class="field-help">Bukan keinginan / belanja discretionary</span></div>
       <input type="hidden" name="source" value="manual" />
       <input type="hidden" name="receiptUrl" />
       <input type="hidden" name="externalRef" />
-      <button class="primary wide icon-label" value="default"><span class="button-icon">✓</span><span>Simpan transaksi</span></button>
+      <div class="form-footer">
+        <p class="form-message muted" role="status" aria-live="polite"></p>
+        <div class="actions">
+          <button type="button" data-dialog-close class="secondary">Batal</button>
+          <button class="primary" type="submit" value="default"><span data-icon="check"></span><span>Simpan transaksi</span></button>
+        </div>
+      </div>
     </form>
   </dialog>
 

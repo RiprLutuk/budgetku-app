@@ -28,6 +28,10 @@ const paths = {
 
 export const icon = (name, className = '') => `<svg class="icon ${className}" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${paths[name] || paths.plus}</svg>`;
 
+export const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (character) => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;',
+})[character]);
+
 export function hydrateIcons(root = document) {
   root.querySelectorAll('[data-icon]').forEach((element) => { element.innerHTML = icon(element.dataset.icon); });
 }
@@ -41,7 +45,7 @@ document.addEventListener('pointerdown', (event) => {
 window.addEventListener('resize', () => openedSelect?.position());
 document.addEventListener('scroll', () => openedSelect?.position(), true);
 
-export function searchableSelect(host, { name, label, options, value = '', onChange = () => {} }) {
+export function searchableSelect(host, { name, label, options, value = '', inputId, describedBy, onChange = () => {} }) {
   host.selectControl?.destroy();
   const identifier = `suggest-${++selectId}`;
   host.classList.add('search-select');
@@ -51,6 +55,8 @@ export function searchableSelect(host, { name, label, options, value = '', onCha
   const toggle = host.querySelector('button');
   const list = host.querySelector('[role=listbox]');
   hidden.name = name;
+  input.id = inputId || identifier + '-input';
+  if (describedBy) input.setAttribute('aria-describedby', describedBy);
   input.setAttribute('aria-label', label);
   input.placeholder = `Cari ${label.toLowerCase()}...`;
   toggle.setAttribute('aria-label', `Pilihan ${label.toLowerCase()}`);
