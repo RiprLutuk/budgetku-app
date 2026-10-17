@@ -93,7 +93,7 @@ Tambahkan redirect URI `https://<domain-aplikasi>/auth/google/callback` ke Googl
 
 - `.gitignore` mengecualikan `.env`, `.dev.vars`, database SQLite, state Wrangler, nota/data lokal, log, dan build output.
 - Hanya template konfigurasi kosong yang masuk repository. Jangan menaruh secret pada `wrangler.jsonc`.
-- Password memakai PBKDF2-SHA256 dengan salt; sesi disimpan di database, dengan cookie HttpOnly, SameSite=Lax, dan Secure di HTTPS.
+- Password memakai PBKDF2-SHA256 dengan salt dan 100.000 iterasi sesuai batas runtime Cloudflare Workers. Hash baru menyimpan algoritma dan jumlah iterasi; hash lokal lama di-upgrade saat login berhasil. Sesi disimpan di database, dengan cookie HttpOnly, SameSite=Lax, dan Secure di HTTPS.
 - API memeriksa membership household untuk pembacaan, setoran goal, dan nota. Pengaturan household dan pembuatan invite hanya untuk owner.
 - Ini aplikasi MVP. Evaluasi rate limiting, retensi data, enkripsi token Gmail, monitoring, dan backup sebelum penggunaan finansial skala besar.
 - Backup SQLite secara konsisten menggunakan SQLite backup API atau ketika server berhenti; sertakan folder nota. Jangan commit backup.

@@ -4,7 +4,7 @@ import { bodyLimit } from "hono/body-limit";
 import crypto from "node:crypto";
 import { getDb, queryOne } from "../lib/db.js";
 import { GOAL_FOR_CATEGORY_SQL, GOALS_SNAPSHOT_SQL } from "../lib/goals.js";
-import { ensureSuperadmin, hashPassword, mountAdminRoutes } from "../lib/admin.js";
+import { ensureSuperadmin, hashPassword, mountAdminRoutes, needsPasswordRehash, verifyPassword } from "../lib/admin.js";
 
 const app = new Hono();
 
@@ -31,20 +31,6 @@ async function readJson(c) {
     throw new HTTPException(400, { message: "JSON harus berupa objek" });
   }
   return body;
-}
-function legacyPasswordHash(password) {
-  return crypto.createHash("sha256").update(String(password)).digest("hex");
-}
-function verifyPassword(password, stored = "") {
-  if (!stored.includes(".")) {
-    if (!/^[a-f0-9]{64}$/.test(stored)) return false;
-    return crypto.timingSafeEqual(Buffer.from(stored), Buffer.from(legacyPasswordHash(password)));
-  }
-  const [salt, expected] = stored.split(".");
-  if (!salt || !expected) return false;
-  const actual = hashPassword(password, salt).split(".")[1];
-  if (Buffer.byteLength(actual) !== Buffer.byteLength(expected)) return false;
-  return crypto.timingSafeEqual(Buffer.from(actual), Buffer.from(expected));
 }
 function cookie(c, name) {
   const raw = c.req.header("cookie") || "";
@@ -219,7 +205,7 @@ app.use("*", async (c, next) => {
 });
 app.onError((error, c) => {
   if (error instanceof HTTPException) return json(c, { error: error.message }, error.status);
-  console.error("BudgetKu API gagal:", error.code || error.name);
+  console.error("BudgetKu API gagal:", error.code || error.name, error.message);
   return json(c, { error: "Permintaan gagal. Silakan coba lagi." }, 500);
 });
 app.notFound((c) => json(c, { error: "Endpoint tidak ditemukan" }, 404));
@@ -233,7 +219,7 @@ app.post("/api/auth/login", async (c) => {
   if (!password || password.length > 1024) return json(c, { error: "Email atau password salah" }, 401);
   const user = await queryOne(db, "SELECT * FROM users WHERE email=?", [normEmail(body.email)]);
   if (!user || user.status !== "active" || !verifyPassword(password, user.password_hash)) return json(c, { error: "Email atau password salah" }, 401);
-  if (!user.password_hash.includes(".")) {
+  if (needsPasswordRehash(user.password_hash)) {
     await db.execute({ sql: "UPDATE users SET password_hash=? WHERE id=?", args: [hashPassword(body.password), user.id] });
   }
   const sessionId = token();
