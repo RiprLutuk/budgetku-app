@@ -4,6 +4,7 @@ import { localDateValue } from "./forms.js";
 import { renderGoals as renderGoalsView } from "./views/goals.js";
 import { renderSettings as renderSettingsView } from "./views/settings.js";
 import { createTransactionDialog } from "./components/transaction-dialog.js";
+import { summarizeCashflow } from "./cashflow.js";
 
 let me = null,
   txDialog = null,
@@ -14,6 +15,7 @@ let me = null,
   eventSource = null,
   snapshotRequestId = 0,
   currentMonth = localDateValue().slice(0, 7),
+  followingCurrentMonth = true,
   pendingJoin = new URLSearchParams(location.search).get("join"),
   editingUserId = null;
 const app = document.querySelector("#app"),
@@ -165,14 +167,30 @@ function showApp() {
   renderChrome();
   render();
 }
+function shiftMonth(offset) {
+  const [year, month] = currentMonth.split("-").map(Number);
+  const next = new Date(year, month - 1 + offset, 1);
+  currentMonth = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}`;
+  followingCurrentMonth = currentMonth === localDateValue().slice(0, 7);
+  renderChrome();
+  render();
+}
+function resetMonth() {
+  followingCurrentMonth = true;
+  currentMonth = localDateValue().slice(0, 7);
+  renderChrome();
+  render();
+}
 function renderChrome() {
   if (!me || !snapshot) return;
+  if (followingCurrentMonth) currentMonth = localDateValue().slice(0, 7);
   const household = me.households.find((h) => h.id === snapshot.household.id);
   if (household) household.name = snapshot.household.name;
   document.querySelector("#monthLabel").textContent = new Intl.DateTimeFormat(
     "id-ID",
     { month: "long", year: "numeric" },
   ).format(new Date(`${currentMonth}-01T00:00:00`));
+  document.querySelector("#currentMonthBtn").hidden = currentMonth === localDateValue().slice(0, 7);
   document.querySelectorAll(".admin-only").forEach((el) => {
     el.classList.toggle("hidden", !me.user.is_superadmin);
   });
@@ -183,24 +201,8 @@ function renderChrome() {
     location.reload();
   };
 }
-const monthTx = () =>
-    snapshot.transactions.filter((t) => t.tx_date.slice(0, 7) === currentMonth),
-  income = () =>
-    monthTx()
-      .filter((t) => t.type === "income")
-      .reduce((s, t) => s + t.amount, 0),
-  expense = () =>
-    monthTx()
-      .filter((t) => t.type === "expense")
-      .reduce((s, t) => s + t.amount, 0),
-  goalSavings = () =>
-    monthTx()
-      .filter((t) => t.type === "expense" && t.goal_id)
-      .reduce((total, transaction) => total + transaction.amount, 0),
-  needsExpense = () =>
-    monthTx()
-      .filter((t) => t.type === "expense" && t.need && !t.goal_id)
-      .reduce((s, t) => s + t.amount, 0);
+const monthTx = () => snapshot.transactions.filter((transaction) => transaction.tx_date.slice(0, 7) === currentMonth);
+const monthCashflow = () => summarizeCashflow(snapshot.monthlySummary, currentMonth, snapshot.transactions);
 function render() {
   document
     .querySelectorAll(".nav")
@@ -226,11 +228,11 @@ function render() {
   if (currentView === "users") renderUsers();
   if (currentView === "settings") renderSettings();
 }
-function insightItems() {
-  const inc = income(),
-    exp = expense(),
-    need = needsExpense(),
-    spending = exp - goalSavings(),
+function insightItems(summary = monthCashflow()) {
+  const inc = summary.income,
+    exp = summary.expense,
+    need = summary.needsExpense,
+    spending = exp - summary.goalSavings,
     wants = Math.max(0, spending - need),
     saveAmt = inc - spending,
     out = [];
@@ -277,21 +279,20 @@ function insightItems() {
   return out;
 }
 function renderDashboard() {
-  const inc = income(),
-    exp = expense(),
-    remaining = Math.max(0, inc - exp),
-    daysLeft = Math.max(
-      1,
-      new Date(
-        new Date().getFullYear(),
-        new Date().getMonth() + 1,
-        0,
-      ).getDate() -
-        new Date().getDate() +
-        1,
-    ),
-    safeDay = Math.floor(remaining / daysLeft);
-  app.innerHTML = `<div class="content">${exp > 15000000 ? `<div class="warning-banner"><b>Heads up:</b> pengeluaran bulan ini sudah ${rupiah(exp)}. Kita pakai ini sebagai sinyal untuk cek kebutuhan vs keinginan, bukan vonis boros.</div>` : ""}<div class="grid four"><div class="card card-metric"><div class="metric-label">Income</div><div class="metric-value" style="color:var(--good)">${rupiah(inc)}</div><div class="metric-foot">Bulan aktif</div></div><div class="card card-metric"><div class="metric-label">Spent</div><div class="metric-value" style="color:var(--bad)">${rupiah(exp)}</div><div class="metric-foot">${pct(exp, inc)}% dari income</div></div><div class="card card-metric"><div class="metric-label">Sisa cashflow</div><div class="metric-value">${rupiah(inc - exp)}</div><div class="metric-foot">Income - expense</div></div><div class="card card-metric"><div class="metric-label">Aman / hari</div><div class="metric-value">${rupiah(safeDay)}</div><div class="metric-foot">Hingga akhir bulan</div></div></div><div class="grid two" style="margin-top:14px"><div class="card"><div class="section-title"><div><h3>Insight finansial</h3><p>Rekomendasi arus kas keluarga.</p></div></div>${insightItems().map((x) => `<div class="insight ${x.kind}">${esc(x.text)}</div>`).join("")}</div><div class="card"><div class="section-title"><div><h3>Target keluarga</h3><p>Progress tabungan household</p></div><button class="secondary" data-go="goals"><span class="button-icon">${icon("arrow")}</span><span>Rincian</span></button></div>${snapshot.goals.map((g) => `<div style="margin:10px 0"><div class="split"><b>${esc(g.name)}</b><span class="small muted">${pct(g.current, g.target)}%</span></div><div class="progress" style="margin:6px 0"><span style="width:${Math.min(100, pct(g.current, g.target))}%"></span></div><div class="small muted">${rupiah(g.current)} / ${rupiah(g.target)}</div></div>`).join("")}</div></div><div class="card" style="margin-top:14px"><div class="section-title"><div><h3>Transaksi terbaru</h3><p>Update live dari semua member.</p></div><button class="secondary" data-go="transactions"><span class="button-icon">${icon("transactions")}</span><span>Lihat semua</span></button></div>${renderTxRows(monthTx().slice(0, 8))}</div></div>`;
+  const summary = monthCashflow(),
+    inc = summary.income,
+    exp = summary.expense,
+    carried = summary.openingBalance,
+    available = summary.availableBalance,
+    remaining = Math.max(0, available),
+    today = new Date(),
+    todayMonth = localDateValue(today).slice(0, 7),
+    daysLeft = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate() - today.getDate() + 1,
+    safeDay = currentMonth === todayMonth ? Math.floor(remaining / daysLeft) : null,
+    balanceTone = available < 0 ? "var(--bad)" : "var(--dark)",
+    balanceFoot = carried > 0 ? `Termasuk ${rupiah(carried)} sisa bulan lalu` : carried < 0 ? `${rupiah(Math.abs(carried))} defisit bulan lalu` : "Belum ada saldo bawaan",
+    safeDayFoot = currentMonth === todayMonth ? `${daysLeft} hari hingga akhir bulan` : currentMonth < todayMonth ? "Bulan sudah selesai" : "Rencana bulan berikutnya";
+  app.innerHTML = `<div class="content">${exp > 15000000 ? `<div class="warning-banner"><b>Heads up:</b> pengeluaran bulan ini sudah ${rupiah(exp)}. Kita pakai ini sebagai sinyal untuk cek kebutuhan vs keinginan, bukan vonis boros.</div>` : ""}<div class="grid four"><div class="card card-metric"><div class="metric-label">Income</div><div class="metric-value" style="color:var(--good)">${rupiah(inc)}</div><div class="metric-foot">Bulan aktif</div></div><div class="card card-metric"><div class="metric-label">Spent</div><div class="metric-value" style="color:var(--bad)">${rupiah(exp)}</div><div class="metric-foot">${pct(exp, inc)}% dari income</div></div><div class="card card-metric"><div class="metric-label">Saldo tersedia</div><div class="metric-value" style="color:${balanceTone}">${rupiah(available)}</div><div class="metric-foot">${balanceFoot} · ${rupiah(inc - exp)} bulan ini</div></div><div class="card card-metric"><div class="metric-label">Aman / hari</div><div class="metric-value">${rupiah(safeDay)}</div><div class="metric-foot">${safeDayFoot}</div></div></div><div class="grid two" style="margin-top:14px"><div class="card"><div class="section-title"><div><h3>Insight finansial</h3><p>Rekomendasi arus kas keluarga.</p></div></div>${insightItems().map((x) => `<div class="insight ${x.kind}">${esc(x.text)}</div>`).join("")}</div><div class="card"><div class="section-title"><div><h3>Target keluarga</h3><p>Progress tabungan household</p></div><button class="secondary" data-go="goals"><span class="button-icon">${icon("arrow")}</span><span>Rincian</span></button></div>${snapshot.goals.map((g) => `<div style="margin:10px 0"><div class="split"><b>${esc(g.name)}</b><span class="small muted">${pct(g.current, g.target)}%</span></div><div class="progress" style="margin:6px 0"><span style="width:${Math.min(100, pct(g.current, g.target))}%"></span></div><div class="small muted">${rupiah(g.current)} / ${rupiah(g.target)}</div></div>`).join("")}</div></div><div class="card" style="margin-top:14px"><div class="section-title"><div><h3>Transaksi terbaru</h3><p>Update live dari semua member.</p></div><button class="secondary" data-go="transactions"><span class="button-icon">${icon("transactions")}</span><span>Lihat semua</span></button></div>${renderTxRows(monthTx().slice(0, 8))}</div></div>`;
   bindCommon();
 }
 function renderTxRows(rows) {
@@ -308,7 +309,7 @@ function renderTransactions() {
   bindCommon();
 }
 function renderBudget() {
-  const inc = income();
+  const inc = monthCashflow().income;
   app.innerHTML = `<div class="content"><div class="card"><div class="section-title"><div><h3>Auto allocation</h3><p>Persentase dihitung proporsional dari income bulan aktif.</p></div><button id="saveBudget" class="primary"><span class="button-icon">${icon("save")}</span><span>Simpan budget</span></button></div>${snapshot.categories
     .map((c) => {
       const spent = monthTx()
@@ -617,7 +618,8 @@ function renderSettings() {
   });
 }
 function openTx(prefill = {}) {
-  txDialog?.open(prefill);
+  const today = localDateValue();
+  txDialog?.open({ date: followingCurrentMonth || currentMonth === today.slice(0, 7) ? today : `${currentMonth}-01`, ...prefill });
 }
 function bindCommon() {
   document.querySelector("#addTx2")?.addEventListener("click", () => openTx());
@@ -657,6 +659,12 @@ function setSidebarOpen(open) {
 document.querySelector("#toggleSidebar").onclick = () =>
   setSidebarOpen(!document.querySelector("#sidebar").classList.contains("open"));
 document.querySelector("#sidebarBackdrop").onclick = () => setSidebarOpen(false);
+document.querySelector("#prevMonthBtn").innerHTML = icon("chevronLeft");
+document.querySelector("#nextMonthBtn").innerHTML = icon("chevronRight");
+document.querySelector("#currentMonthBtn").innerHTML = icon("today");
+document.querySelector("#prevMonthBtn").onclick = () => shiftMonth(-1);
+document.querySelector("#nextMonthBtn").onclick = () => shiftMonth(1);
+document.querySelector("#currentMonthBtn").onclick = resetMonth;
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") setSidebarOpen(false);
 });

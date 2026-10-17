@@ -201,6 +201,54 @@ main {
   color: var(--muted);
   font-weight: 500;
 }
+.topbar-title-group {
+  min-width: 0;
+  flex: 1;
+}
+.month-navigator {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  color: var(--muted);
+}
+.month-navigator > #monthLabel {
+  text-align: center;
+  font-size: 11px;
+  white-space: nowrap;
+  text-transform: capitalize;
+}
+.month-nav-btn,
+.month-nav-reset {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+.month-nav-btn:hover,
+.month-nav-reset:hover {
+  background: var(--card-hover);
+  color: var(--dark);
+}
+.month-nav-btn .icon,
+.month-nav-reset .icon {
+  width: 14px;
+  height: 14px;
+}
+.month-nav-reset {
+  margin-left: 3px;
+  padding-inline: 7px;
+  color: var(--accent);
+  white-space: nowrap;
+}
 .content {
   padding: 18px 24px 36px;
   width: 100%;

@@ -36,7 +36,15 @@
     <main>
       <header class="topbar">
         <button id="toggleSidebar" class="icon-btn" aria-label="Buka navigasi" aria-controls="sidebar" aria-expanded="false">☰</button>
-        <div><h1 id="pageTitle">Dashboard</h1><p id="monthLabel"></p></div>
+        <div class="topbar-title-group">
+          <h1 id="pageTitle">Dashboard</h1>
+          <div class="month-navigator" aria-label="Navigasi bulan">
+            <button id="prevMonthBtn" class="month-nav-btn" type="button" aria-label="Bulan sebelumnya" title="Bulan sebelumnya"></button>
+            <span id="monthLabel"></span>
+            <button id="nextMonthBtn" class="month-nav-btn" type="button" aria-label="Bulan berikutnya" title="Bulan berikutnya"></button>
+            <button id="currentMonthBtn" class="month-nav-reset" type="button" aria-label="Kembali ke bulan ini" title="Kembali ke bulan ini" hidden></button>
+          </div>
+        </div>
         <button id="quickAdd" class="primary icon-label"><span class="button-icon">＋</span><span class="hide-compact">Transaksi</span></button>
       </header>
       <section id="app"></section>

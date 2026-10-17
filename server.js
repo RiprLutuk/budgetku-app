@@ -5,6 +5,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { BACKFILL_GOAL_LINKS_SQL, GOAL_FOR_CATEGORY_SQL, GOALS_SNAPSHOT_SQL, GOAL_TRANSACTIONS_INDEX_SQL } from './lib/goals.js';
+import { MONTHLY_SUMMARY_SQL } from './lib/transactions.js';
 import apiApp from './api/index.js';
 import { sqliteBinding } from './lib/sqlite-binding.js';
 
@@ -90,7 +91,7 @@ const server=http.createServer(async(req,res)=>{try{
     res.end(Buffer.from(await response.arrayBuffer()));
     return;
   }
-  if(req.method==='GET'&&p==='/api/snapshot'){const u=requireAuth(req,res);if(!u)return;const h=requireHouse(req,res,u,url);if(!h)return;const hid=h.id,members=db.prepare(`SELECT u.id,u.name,u.email,m.role FROM household_members m JOIN users u ON u.id=m.user_id WHERE m.household_id=? AND u.status='active' ORDER BY m.joined_at`).all(hid),categories=db.prepare(`SELECT id,name,pct,sort_order FROM categories WHERE household_id=? ORDER BY sort_order`).all(hid),transactions=db.prepare(`SELECT t.*,u.name AS created_by_name,c.name AS category_name,g.name AS goal_name FROM transactions t JOIN users u ON u.id=t.user_id LEFT JOIN categories c ON c.id=t.category_id LEFT JOIN goals g ON g.id=t.goal_id AND g.household_id=t.household_id WHERE t.household_id=? ORDER BY tx_date DESC,created_at DESC LIMIT 2000`).all(hid),goals=db.prepare(GOALS_SNAPSHOT_SQL).all(hid);return json(res,200,{household:{id:hid,name:h.name,role:h.role,monthly_limit:h.monthly_limit},members,categories,transactions,goals})}
+  if(req.method==='GET'&&p==='/api/snapshot'){const u=requireAuth(req,res);if(!u)return;const h=requireHouse(req,res,u,url);if(!h)return;const hid=h.id,members=db.prepare(`SELECT u.id,u.name,u.email,m.role FROM household_members m JOIN users u ON u.id=m.user_id WHERE m.household_id=? AND u.status='active' ORDER BY m.joined_at`).all(hid),categories=db.prepare(`SELECT id,name,pct,sort_order FROM categories WHERE household_id=? ORDER BY sort_order`).all(hid),transactions=db.prepare(`SELECT t.*,u.name AS created_by_name,c.name AS category_name,g.name AS goal_name FROM transactions t JOIN users u ON u.id=t.user_id LEFT JOIN categories c ON c.id=t.category_id LEFT JOIN goals g ON g.id=t.goal_id AND g.household_id=t.household_id WHERE t.household_id=? ORDER BY tx_date DESC,created_at DESC LIMIT 2000`).all(hid),goals=db.prepare(GOALS_SNAPSHOT_SQL).all(hid),monthlySummary=db.prepare(MONTHLY_SUMMARY_SQL).all(hid);return json(res,200,{household:{id:hid,name:h.name,role:h.role,monthly_limit:h.monthly_limit},members,categories,transactions,goals,monthlySummary})}
   if(req.method==='GET'&&p==='/api/events'){const u=requireAuth(req,res);if(!u)return;const h=requireHouse(req,res,u,url);if(!h)return;res.writeHead(200,{'Content-Type':'text/event-stream','Cache-Control':'no-cache','Connection':'keep-alive'});const cid=uid();clients.set(cid,{hid:h.id,res});res.write('event: ready\ndata: {}\n\n');const k=setInterval(()=>res.write(': ping\n\n'),25000);req.on('close',()=>{clearInterval(k);clients.delete(cid)});return}
   if(req.method==='POST'&&p==='/api/transactions'){
     const u=requireAuth(req,res);if(!u)return;const h=requireHouse(req,res,u,url);if(!h)return;

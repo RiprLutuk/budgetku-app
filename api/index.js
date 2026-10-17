@@ -4,6 +4,7 @@ import { bodyLimit } from "hono/body-limit";
 import crypto from "node:crypto";
 import { getDb, queryOne } from "../lib/db.js";
 import { GOAL_FOR_CATEGORY_SQL, GOALS_SNAPSHOT_SQL } from "../lib/goals.js";
+import { MONTHLY_SUMMARY_SQL } from "../lib/transactions.js";
 import { ensureSuperadmin, hashPassword, mountAdminRoutes, needsPasswordRehash, verifyPassword } from "../lib/admin.js";
 import { googleOAuthConfig, isGoogleOAuthConfigured } from "../lib/oauth.js";
 
@@ -278,11 +279,12 @@ app.get("/api/snapshot", async (c) => {
   if (!user) return;
   const household = await requireHousehold(c, user);
   if (!household) return;
-  const [members, categories, transactions, goals] = await Promise.all([
+  const [members, categories, transactions, goals, monthlySummary] = await Promise.all([
     db.execute({ sql: `SELECT u.id,u.name,u.email,m.role FROM household_members m JOIN users u ON u.id=m.user_id WHERE m.household_id=? ORDER BY m.joined_at`, args: [household.id] }),
     db.execute({ sql: "SELECT id,name,pct,sort_order FROM categories WHERE household_id=? ORDER BY sort_order", args: [household.id] }),
     db.execute({ sql: `SELECT t.*,u.name AS created_by_name,c.name AS category_name,g.name AS goal_name FROM transactions t JOIN users u ON u.id=t.user_id LEFT JOIN categories c ON c.id=t.category_id LEFT JOIN goals g ON g.id=t.goal_id AND g.household_id=t.household_id WHERE t.household_id=? ORDER BY tx_date DESC,created_at DESC LIMIT 2000`, args: [household.id] }),
     db.execute({ sql: GOALS_SNAPSHOT_SQL, args: [household.id] }),
+    db.execute({ sql: MONTHLY_SUMMARY_SQL, args: [household.id] }),
   ]);
   return json(c, {
     household: { id: household.id, name: household.name, role: household.role, monthly_limit: household.monthly_limit },
@@ -290,6 +292,7 @@ app.get("/api/snapshot", async (c) => {
     categories: categories.rows,
     transactions: transactions.rows,
     goals: goals.rows,
+    monthlySummary: monthlySummary.rows,
     realtime: "polling",
   });
 });

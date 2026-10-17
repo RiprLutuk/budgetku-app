@@ -1,10 +1,11 @@
-const CACHE = 'budgetku-family-v11-refactor';
+const CACHE = 'budgetku-family-v12-rollover';
 const ASSETS = [
   '/',
   '/index.html',
   '/app.css',
   '/app.js',
   '/forms.js',
+  '/cashflow.js',
   '/components/transaction-dialog.js',
   '/views/goals.js',
   '/views/settings.js',

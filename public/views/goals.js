@@ -4,7 +4,7 @@ import { escapeHtml, icon } from '../ui.js';
 export function renderGoals(container, { snapshot, rupiah, pct, onSaveGoal, api, toast, refresh }) {
   container.innerHTML = `<div class="content"><section class="card" aria-labelledby="goalsSectionTitle">
     <div class="section-title">
-      <div><h3 id="goalsSectionTitle">Target keluarga</h3><p>Setoran tabungan dicatat sebagai pengeluaran agar saldo bertambah konsisten.</p></div>
+      <div><h3 id="goalsSectionTitle">Target keluarga</h3><p>Setoran mengurangi saldo kas sekali; progres goal tetap berjalan lintas bulan sampai tercapai.</p></div>
       <button id="saveGoals" class="primary" type="button">${icon('save')}<span>Simpan target</span></button>
     </div>
     <div class="goals-list">${snapshot.goals.map((goal) => {

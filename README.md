@@ -5,10 +5,11 @@ Dashboard keuangan keluarga yang compact, mobile-friendly, dengan format Rupiah,
 ## Fitur
 
 - Register/login, role owner/member, dan undangan household yang berlaku 7 hari.
-- Pemasukan, pengeluaran, kategori, dan alokasi budget bulanan.
+- Pemasukan, pengeluaran, kategori, alokasi budget bulanan, dan saldo rollover otomatis antarbulan.
 - Goals: saldo awal + total setoran dari transaksi; menghapus setoran otomatis mengoreksi progres.
 - Kategori `Target Umroh`, `Target Mobil`, dan `Target Rumah` memilih goal yang sesuai. Alokasi goal dapat diubah pada form transaksi.
 - Setoran mengurangi sisa cashflow satu kali; saldo awal tidak menciptakan pengeluaran baru.
+- Saldo tersedia bulan aktif = saldo bulan-bulan sebelumnya + arus kas bulan aktif; goals tetap kumulatif sampai tercapai.
 - Auto Budget adalah rencana, bukan bukti transfer. Catat uang yang benar-benar disisihkan melalui tombol **Tabung**.
 - Invite pasangan, sinkronisasi antarperangkat, OCR nota di browser, dan impor kandidat Gmail opsional.
 - PWA dengan aset aplikasi offline; data finansial tetap membutuhkan koneksi server.
