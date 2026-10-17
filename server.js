@@ -5,6 +5,8 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { BACKFILL_GOAL_LINKS_SQL, GOAL_FOR_CATEGORY_SQL, GOALS_SNAPSHOT_SQL, GOAL_TRANSACTIONS_INDEX_SQL } from './lib/goals.js';
+import apiApp from './api/index.js';
+import { sqliteBinding } from './lib/sqlite-binding.js';
 
 const __filename=fileURLToPath(import.meta.url), __dirname=path.dirname(__filename);
 function loadEnv(file=path.join(__dirname,'.env')){try{for(const line of fs.readFileSync(file,'utf8').split(/\r?\n/)){const s=line.trim();if(!s||s.startsWith('#'))continue;const i=s.indexOf('=');if(i>0&&!process.env[s.slice(0,i)])process.env[s.slice(0,i)]=s.slice(i+1)}}catch{}}
@@ -13,7 +15,7 @@ const PORT=Number(process.env.PORT||3000), DATA_DIR=path.resolve(__dirname,proce
 fs.mkdirSync(UPLOAD_DIR,{recursive:true});
 const db=new DatabaseSync(path.join(DATA_DIR,'budgetku.sqlite'));
 db.exec(`PRAGMA journal_mode=WAL;PRAGMA foreign_keys=ON;
-CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,email TEXT UNIQUE NOT NULL,name TEXT NOT NULL,password_hash TEXT NOT NULL,created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,email TEXT UNIQUE NOT NULL,name TEXT NOT NULL,password_hash TEXT NOT NULL,created_at TEXT NOT NULL,is_superadmin INTEGER NOT NULL DEFAULT 0,status TEXT NOT NULL DEFAULT 'active',deleted_at TEXT);
 CREATE TABLE IF NOT EXISTS households(id TEXT PRIMARY KEY,name TEXT NOT NULL,owner_id TEXT NOT NULL,monthly_limit INTEGER NOT NULL DEFAULT 15000000,created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS household_members(household_id TEXT NOT NULL,user_id TEXT NOT NULL,role TEXT NOT NULL DEFAULT 'member',joined_at TEXT NOT NULL,PRIMARY KEY(household_id,user_id));
 CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY,user_id TEXT NOT NULL,expires_at TEXT NOT NULL);
@@ -22,7 +24,9 @@ CREATE TABLE IF NOT EXISTS transactions(id TEXT PRIMARY KEY,household_id TEXT NO
 CREATE TABLE IF NOT EXISTS goals(id TEXT PRIMARY KEY,household_id TEXT NOT NULL,name TEXT NOT NULL,target INTEGER NOT NULL DEFAULT 0,current INTEGER NOT NULL DEFAULT 0,target_date TEXT,sort_order INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS invites(token TEXT PRIMARY KEY,household_id TEXT NOT NULL,created_by TEXT NOT NULL,expires_at TEXT NOT NULL,used_by TEXT);
 CREATE TABLE IF NOT EXISTS oauth_states(state TEXT PRIMARY KEY,user_id TEXT NOT NULL,expires_at TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS gmail_tokens(user_id TEXT PRIMARY KEY,token_json TEXT NOT NULL,updated_at TEXT NOT NULL);`);
+CREATE TABLE IF NOT EXISTS gmail_tokens(user_id TEXT PRIMARY KEY,token_json TEXT NOT NULL,updated_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS receipts(id TEXT PRIMARY KEY,household_id TEXT NOT NULL,data_url TEXT NOT NULL,created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS household_defaults(household_id TEXT PRIMARY KEY,initialized_at TEXT NOT NULL);`);
 
 db.exec('BEGIN IMMEDIATE');
 try {
@@ -31,6 +35,16 @@ try {
     db.exec(BACKFILL_GOAL_LINKS_SQL);
   }
   db.exec(GOAL_TRANSACTIONS_INDEX_SQL);
+  const userCols = db.prepare('PRAGMA table_info(users)').all().map((column) => column.name);
+  if (!userCols.includes('is_superadmin')) db.exec('ALTER TABLE users ADD COLUMN is_superadmin INTEGER NOT NULL DEFAULT 0');
+  if (!userCols.includes('status')) db.exec("ALTER TABLE users ADD COLUMN status TEXT NOT NULL DEFAULT 'active'");
+  if (!userCols.includes('deleted_at')) db.exec('ALTER TABLE users ADD COLUMN deleted_at TEXT');
+  db.exec(fs.readFileSync(path.join(__dirname, 'migrations/0002_superadmin.sql'), 'utf8').replace(/^ALTER TABLE[^\n]+/gm, ''));
+  const superCount = db.prepare("SELECT COUNT(*) AS count FROM users WHERE is_superadmin=1 AND status='active'").get().count;
+  if (!superCount) {
+    const firstUser = db.prepare('SELECT id FROM users ORDER BY created_at ASC LIMIT 1').get();
+    if (firstUser) db.prepare("UPDATE users SET is_superadmin=1,status='active' WHERE id=?").run(firstUser.id);
+  }
   db.exec('COMMIT');
 } catch (error) {
   db.exec('ROLLBACK');
@@ -42,7 +56,7 @@ const now=()=>new Date().toISOString(), uid=()=>crypto.randomUUID(), token=(n=24
 function hashPassword(password,salt=token(16)){const hash=crypto.pbkdf2Sync(String(password),salt,120000,32,'sha256').toString('base64url');return `${salt}.${hash}`}
 function verifyPassword(password,stored=''){const [salt,expected]=stored.split('.');if(!salt||!expected)return false;const actual=hashPassword(password,salt).split('.')[1];return crypto.timingSafeEqual(Buffer.from(actual),Buffer.from(expected))}
 function cookies(req){return Object.fromEntries(String(req.headers.cookie||'').split(';').map(x=>x.trim()).filter(Boolean).map(x=>{const i=x.indexOf('=');return [decodeURIComponent(x.slice(0,i)),decodeURIComponent(x.slice(i+1))]}))}
-function sessionUser(req){const sid=cookies(req).budgetku_session;if(!sid)return null;const r=db.prepare(`SELECT u.id,u.email,u.name,s.expires_at FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=?`).get(sid);return r&&new Date(r.expires_at)>new Date()?r:null}
+function sessionUser(req){const sid=cookies(req).budgetku_session;if(!sid)return null;const r=db.prepare(`SELECT u.id,u.email,u.name,u.is_superadmin,u.status,s.expires_at FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=?`).get(sid);return r&&r.status==='active'&&new Date(r.expires_at)>new Date()?r:null}
 function householdFor(userId,hid){if(hid)return db.prepare(`SELECT h.*,m.role FROM households h JOIN household_members m ON m.household_id=h.id WHERE h.id=? AND m.user_id=?`).get(hid,userId);return db.prepare(`SELECT h.*,m.role FROM households h JOIN household_members m ON m.household_id=h.id WHERE m.user_id=? ORDER BY h.created_at LIMIT 1`).get(userId)}
 function createHousehold(userId,name='Keluarga Kita'){const hid=uid();db.prepare(`INSERT INTO households(id,name,owner_id,created_at) VALUES(?,?,?,?)`).run(hid,name,userId,now());db.prepare(`INSERT INTO household_members(household_id,user_id,role,joined_at) VALUES(?,?,?,?)`).run(hid,userId,'owner',now());const c=db.prepare(`INSERT INTO categories(id,household_id,name,pct,sort_order) VALUES(?,?,?,?,?)`);DEFAULT_BUDGET.forEach(([n,p],i)=>c.run(uid(),hid,n,p,i));const g=db.prepare(`INSERT INTO goals(id,household_id,name,target,current,sort_order) VALUES(?,?,?,?,?,?)`);DEFAULT_GOALS.forEach(([n,t],i)=>g.run(uid(),hid,n,t,0,i));return hid}
 function send(res,status,data,headers={}){const body=typeof data==='string'?data:JSON.stringify(data);res.writeHead(status,{'Content-Type':typeof data==='string'?'text/plain; charset=utf-8':'application/json; charset=utf-8','Content-Length':Buffer.byteLength(body),...headers});res.end(body)}
@@ -50,7 +64,7 @@ function json(res,status,data,headers={}){send(res,status,data,headers)}
 async function bodyJson(req){let total=0,chunks=[];for await(const ch of req){total+=ch.length;if(total>12*1024*1024)throw new Error('Payload terlalu besar');chunks.push(ch)}if(!chunks.length)return{};return JSON.parse(Buffer.concat(chunks).toString('utf8'))}
 function setSessionHeader(userId){const sid=token(32),exp=new Date(Date.now()+30*86400000).toISOString();db.prepare(`INSERT INTO sessions(id,user_id,expires_at) VALUES(?,?,?)`).run(sid,userId,exp);return `budgetku_session=${encodeURIComponent(sid)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${30*86400}${process.env.NODE_ENV==='production'?'; Secure':''}`}
 const clients=new Map();function broadcast(hid){const p=`event: changed\ndata: ${JSON.stringify({householdId:hid,at:now()})}\n\n`;for(const c of clients.values())if(c.hid===hid)c.res.write(p)}
-function mime(p){return p.endsWith('.html')?'text/html; charset=utf-8':p.endsWith('.js')?'text/javascript; charset=utf-8':p.endsWith('.css')?'text/css; charset=utf-8':p.endsWith('.webmanifest')?'application/manifest+json':p.endsWith('.png')?'image/png':p.endsWith('.jpg')||p.endsWith('.jpeg')?'image/jpeg':p.endsWith('.webp')?'image/webp':'application/octet-stream'}
+function mime(p){return p.endsWith('.html')?'text/html; charset=utf-8':p.endsWith('.js')?'text/javascript; charset=utf-8':p.endsWith('.css')?'text/css; charset=utf-8':p.endsWith('.svg')?'image/svg+xml':p.endsWith('.woff2')?'font/woff2':p.endsWith('.webmanifest')?'application/manifest+json':p.endsWith('.png')?'image/png':p.endsWith('.jpg')||p.endsWith('.jpeg')?'image/jpeg':p.endsWith('.webp')?'image/webp':'application/octet-stream'}
 function staticFile(res,file){if(!fs.existsSync(file)||!fs.statSync(file).isFile())return false;const b=fs.readFileSync(file);res.writeHead(200,{'Content-Type':mime(file),'Content-Length':b.length});res.end(b);return true}
 function requireAuth(req,res){const u=sessionUser(req);if(!u){json(res,401,{error:'Silakan login dulu'});return null}return u}
 function requireHouse(req,res,u,url){const h=householdFor(u.id,req.headers['x-household-id']||url.searchParams.get('householdId'));if(!h){json(res,403,{error:'Tidak punya akses household'});return null}return h}
@@ -71,11 +85,22 @@ const hdr=(arr,name)=>arr.find(h=>h.name?.toLowerCase()===name.toLowerCase())?.v
 const server=http.createServer(async(req,res)=>{try{
   const url=new URL(req.url,`http://${req.headers.host||'localhost'}`), p=url.pathname;
   if(req.method==='GET'&&p==='/health')return json(res,200,{ok:true,db:'sqlite',realtimeClients:clients.size});
-  if(req.method==='POST'&&p==='/api/auth/register'){const b=await bodyJson(req),email=normEmail(b.email),name=String(b.name||'').trim(),password=String(b.password||'');if(!email.includes('@')||name.length<2||password.length<6)return json(res,400,{error:'Nama, email, dan password minimal 6 karakter wajib diisi'});try{const id=uid();db.prepare(`INSERT INTO users(id,email,name,password_hash,created_at) VALUES(?,?,?,?,?)`).run(id,email,name,hashPassword(password),now());createHousehold(id,String(b.householdName||'Keluarga Kita').trim()||'Keluarga Kita');return json(res,200,{ok:true},{'Set-Cookie':setSessionHeader(id)})}catch(e){return json(res,409,{error:String(e.message).includes('UNIQUE')?'Email sudah terdaftar':e.message})}}
-  if(req.method==='POST'&&p==='/api/auth/login'){const b=await bodyJson(req),u=db.prepare(`SELECT * FROM users WHERE email=?`).get(normEmail(b.email));if(!u||!verifyPassword(String(b.password||''),u.password_hash))return json(res,401,{error:'Email atau password salah'});return json(res,200,{ok:true},{'Set-Cookie':setSessionHeader(u.id)})}
-  if(req.method==='POST'&&p==='/api/auth/logout'){const u=requireAuth(req,res);if(!u)return;const sid=cookies(req).budgetku_session;if(sid)db.prepare(`DELETE FROM sessions WHERE id=?`).run(sid);return json(res,200,{ok:true},{'Set-Cookie':'budgetku_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0'})}
-  if(req.method==='GET'&&p==='/api/me'){const u=requireAuth(req,res);if(!u)return;const households=db.prepare(`SELECT h.id,h.name,m.role FROM households h JOIN household_members m ON m.household_id=h.id WHERE m.user_id=? ORDER BY h.created_at`).all(u.id);return json(res,200,{user:{id:u.id,email:u.email,name:u.name},households})}
-  if(req.method==='GET'&&p==='/api/snapshot'){const u=requireAuth(req,res);if(!u)return;const h=requireHouse(req,res,u,url);if(!h)return;const hid=h.id,members=db.prepare(`SELECT u.id,u.name,u.email,m.role FROM household_members m JOIN users u ON u.id=m.user_id WHERE m.household_id=? ORDER BY m.joined_at`).all(hid),categories=db.prepare(`SELECT id,name,pct,sort_order FROM categories WHERE household_id=? ORDER BY sort_order`).all(hid),transactions=db.prepare(`SELECT t.*,u.name AS created_by_name,c.name AS category_name,g.name AS goal_name FROM transactions t JOIN users u ON u.id=t.user_id LEFT JOIN categories c ON c.id=t.category_id LEFT JOIN goals g ON g.id=t.goal_id AND g.household_id=t.household_id WHERE t.household_id=? ORDER BY tx_date DESC,created_at DESC LIMIT 2000`).all(hid),goals=db.prepare(GOALS_SNAPSHOT_SQL).all(hid);return json(res,200,{household:{id:hid,name:h.name,role:h.role,monthly_limit:h.monthly_limit},members,categories,transactions,goals})}
+  if(p.startsWith('/api/auth/')||p.startsWith('/api/admin/')||p.startsWith('/api/account/')||p==='/api/me') {
+    const chunks = [];
+    let size = 0;
+    for await (const chunk of req) {
+      size += chunk.length;
+      if (size > 1500000) return json(res, 413, {error:'Payload terlalu besar'});
+      chunks.push(chunk);
+    }
+    const method = req.method || 'GET';
+    const request = new Request(url, {method,headers:req.headers,...(!['GET','HEAD'].includes(method)?{body:Buffer.concat(chunks)}:{})});
+    const response = await apiApp.fetch(request, {...process.env,DB:sqliteBinding(db)});
+    res.writeHead(response.status, Object.fromEntries(response.headers));
+    res.end(Buffer.from(await response.arrayBuffer()));
+    return;
+  }
+  if(req.method==='GET'&&p==='/api/snapshot'){const u=requireAuth(req,res);if(!u)return;const h=requireHouse(req,res,u,url);if(!h)return;const hid=h.id,members=db.prepare(`SELECT u.id,u.name,u.email,m.role FROM household_members m JOIN users u ON u.id=m.user_id WHERE m.household_id=? AND u.status='active' ORDER BY m.joined_at`).all(hid),categories=db.prepare(`SELECT id,name,pct,sort_order FROM categories WHERE household_id=? ORDER BY sort_order`).all(hid),transactions=db.prepare(`SELECT t.*,u.name AS created_by_name,c.name AS category_name,g.name AS goal_name FROM transactions t JOIN users u ON u.id=t.user_id LEFT JOIN categories c ON c.id=t.category_id LEFT JOIN goals g ON g.id=t.goal_id AND g.household_id=t.household_id WHERE t.household_id=? ORDER BY tx_date DESC,created_at DESC LIMIT 2000`).all(hid),goals=db.prepare(GOALS_SNAPSHOT_SQL).all(hid);return json(res,200,{household:{id:hid,name:h.name,role:h.role,monthly_limit:h.monthly_limit},members,categories,transactions,goals})}
   if(req.method==='GET'&&p==='/api/events'){const u=requireAuth(req,res);if(!u)return;const h=requireHouse(req,res,u,url);if(!h)return;res.writeHead(200,{'Content-Type':'text/event-stream','Cache-Control':'no-cache','Connection':'keep-alive'});const cid=uid();clients.set(cid,{hid:h.id,res});res.write('event: ready\ndata: {}\n\n');const k=setInterval(()=>res.write(': ping\n\n'),25000);req.on('close',()=>{clearInterval(k);clients.delete(cid)});return}
   if(req.method==='POST'&&p==='/api/transactions'){
     const u=requireAuth(req,res);if(!u)return;const h=requireHouse(req,res,u,url);if(!h)return;

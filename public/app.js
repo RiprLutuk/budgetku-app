@@ -1,4 +1,5 @@
 import { bindMoneyInputs, formatMoneyInput, numericAmount } from "./money.js";
+import { closeSelects, icon, searchableSelect } from "./ui.js";
 
 let me = null,
   snapshot = null,
@@ -8,7 +9,12 @@ let me = null,
   eventSource = null,
   snapshotRequestId = 0,
   currentMonth = new Date().toISOString().slice(0, 7),
-  pendingJoin = new URLSearchParams(location.search).get("join");
+  pendingJoin = new URLSearchParams(location.search).get("join"),
+  categoryControl = null,
+  goalControl = null,
+  paidByControl = null,
+  householdControl = null,
+  editingUserId = null;
 const app = document.querySelector("#app"),
   authScreen = document.querySelector("#authScreen"),
   shell = document.querySelector("#shell"),
@@ -31,9 +37,10 @@ const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
 function isEditing() {
   const active = document.activeElement;
   return (
-    !["dashboard", "transactions", "goals"].includes(currentView) ||
+    !["dashboard", "transactions", "goals", "users"].includes(currentView) ||
     Boolean(document.querySelector("dialog[open]")) ||
     Boolean(app.querySelector(".goal-settings[open]")) ||
+    Boolean(document.querySelector(".search-select.open")) ||
     ["INPUT", "TEXTAREA", "SELECT"].includes(active?.tagName)
   );
 }
@@ -84,17 +91,16 @@ async function boot() {
 function showAuth() {
   shell.classList.add("hidden");
   authScreen.classList.remove("hidden");
-  renderAuth("login");
+  renderAuth();
 }
-function renderAuth(mode = "login") {
-  authScreen.innerHTML = `<div class="auth-card"><div class="kicker">Collaborative household budgeting</div><h1>BudgetKu Family</h1><p class="hero-note">Tracking penghasilan, kebutuhan, goals, nota, dan Gmail bersama pasangan.</p><div class="auth-tabs"><button class="auth-tab ${mode === "login" ? "active" : ""}" data-auth="login">Login</button><button class="auth-tab ${mode === "register" ? "active" : ""}" data-auth="register">Daftar</button></div>${mode === "login" ? `<form id="loginForm"><label>Email<input name="email" type="email" required></label><label>Password<input name="password" type="password" required></label><button class="primary">Login</button></form>` : `<form id="registerForm"><label>Nama<input name="name" required></label><label>Email<input name="email" type="email" required></label><label>Password<input name="password" type="password" minlength="6" required></label><label>Nama household<input name="householdName" value="Keluarga Kita" required></label><button class="primary">Buat akun</button></form>`}<div id="authError" class="small" style="color:#b91c1c;margin-top:10px"></div></div>`;
-  document
-    .querySelectorAll("[data-auth]")
-    .forEach((b) => (b.onclick = () => renderAuth(b.dataset.auth)));
+function renderAuth() {
+  authScreen.innerHTML = `<div class="auth-card"><div class="auth-brand"><img src="/favicon.svg" alt="" class="brand-mark" style="width:36px;height:36px"><div><b style="font-size:16px;color:#0f172a">BudgetKu</b><div class="kicker">Family money tracker</div></div></div><h1>Masuk ke Dashboard</h1><p class="hero-note">Pendaftaran publik dinonaktifkan. Gunakan akun keluarga atau superadmin yang diberikan.</p><form id="loginForm"><label>Email<input name="email" type="email" autocomplete="username" placeholder="nama@keluarga.id" required></label><label>Password<input name="password" type="password" autocomplete="current-password" placeholder="••••••••" required></label><button class="primary wide"><span class="button-icon">${icon("shield")}</span><span>Masuk</span></button></form><div id="authError" class="insight bad hidden" style="margin-top:12px"></div></div>`;
   document
     .querySelector("#loginForm")
     ?.addEventListener("submit", async (e) => {
       e.preventDefault();
+      const errBox = document.querySelector("#authError");
+      errBox.classList.add("hidden");
       try {
         await api("/api/auth/login", {
           method: "POST",
@@ -104,23 +110,8 @@ function renderAuth(mode = "login") {
         });
         await boot();
       } catch (err) {
-        document.querySelector("#authError").textContent = err.message;
-      }
-    });
-  document
-    .querySelector("#registerForm")
-    ?.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      try {
-        await api("/api/auth/register", {
-          method: "POST",
-          body: JSON.stringify(
-            Object.fromEntries(new FormData(e.currentTarget)),
-          ),
-        });
-        await boot();
-      } catch (err) {
-        document.querySelector("#authError").textContent = err.message;
+        errBox.textContent = err.message;
+        errBox.classList.remove("hidden");
       }
     });
 }
@@ -186,15 +177,22 @@ function renderChrome() {
     "id-ID",
     { month: "long", year: "numeric" },
   ).format(new Date(`${currentMonth}-01T00:00:00`));
-  document.querySelector("#householdSwitcher").innerHTML =
-    `<select id="householdSelect">${me.households.map((h) => `<option value="${h.id}" ${h.id === activeHouseholdId ? "selected" : ""}>${esc(h.name)}</option>`).join("")}</select>`;
+  document.querySelectorAll(".admin-only").forEach((el) => {
+    el.classList.toggle("hidden", !me.user.is_superadmin);
+  });
+  householdControl = searchableSelect(document.querySelector("#householdSwitcher"), {
+    name: "activeHousehold",
+    label: "Household",
+    value: activeHouseholdId,
+    options: me.households.map((h) => ({ value: h.id, label: h.name })),
+    onChange: async (nextId) => {
+      activeHouseholdId = nextId;
+      localStorage.setItem("budgetku.household", activeHouseholdId);
+      await loadSnapshot();
+    },
+  });
   document.querySelector("#userMini").innerHTML =
-    `<b>${esc(me.user.name)}</b><br>${esc(me.user.email)}<br><button id="logoutBtn" class="secondary" style="margin-top:8px;width:100%">Logout</button>`;
-  document.querySelector("#householdSelect").onchange = async (e) => {
-    activeHouseholdId = e.target.value;
-    localStorage.setItem("budgetku.household", activeHouseholdId);
-    await loadSnapshot();
-  };
+    `<div class="side-user-meta"><b>${esc(me.user.name)}</b><span class="small muted">${esc(me.user.email)}</span>${me.user.is_superadmin ? `<span class="pill badge-admin" style="margin-top:2px;width:max-content">Superadmin</span>` : ""}</div><button id="logoutBtn" class="secondary" style="margin-top:8px;width:100%"><span class="button-icon">${icon("logout")}</span><span>Keluar</span></button>`;
   document.querySelector("#logoutBtn").onclick = async () => {
     await api("/api/auth/logout", { method: "POST" });
     location.reload();
@@ -231,6 +229,7 @@ function render() {
     goals: "Goals",
     receipts: "Nota & Gmail",
     family: "Family",
+    users: "Kelola User",
     settings: "Settings",
   }[currentView];
   if (currentView === "dashboard") renderDashboard();
@@ -239,6 +238,7 @@ function render() {
   if (currentView === "goals") renderGoals();
   if (currentView === "receipts") renderReceipts();
   if (currentView === "family") renderFamily();
+  if (currentView === "users") renderUsers();
   if (currentView === "settings") renderSettings();
 }
 function insightItems() {
@@ -306,11 +306,7 @@ function renderDashboard() {
         1,
     ),
     safeDay = Math.floor(remaining / daysLeft);
-  app.innerHTML = `<div class="content">${exp > 15000000 ? `<div class="warning-banner"><b>Heads up:</b> pengeluaran bulan ini sudah ${rupiah(exp)}. Kita pakai ini sebagai sinyal untuk cek kebutuhan vs keinginan, bukan vonis boros.</div>` : ""}<div class="grid four"><div class="card"><div class="metric-label">Income</div><div class="metric-value">${rupiah(inc)}</div><div class="metric-foot">bulan aktif</div></div><div class="card"><div class="metric-label">Spent</div><div class="metric-value">${rupiah(exp)}</div><div class="metric-foot">${pct(exp, inc)}% dari income</div></div><div class="card"><div class="metric-label">Sisa cashflow</div><div class="metric-value">${rupiah(inc - exp)}</div><div class="metric-foot">income - expense</div></div><div class="card"><div class="metric-label">Safe to spend / hari</div><div class="metric-value">${rupiah(safeDay)}</div><div class="metric-foot">hingga akhir bulan</div></div></div><div class="grid two" style="margin-top:16px"><div class="card"><div class="section-title"><div><h3>Insight bulan ini</h3><p>Fokus ke keputusan, bukan sekadar chart.</p></div></div>${insightItems()
-    .map((x) => `<div class="insight ${x.kind}">${esc(x.text)}</div>`)
-    .join(
-      "",
-    )}</div><div class="card"><div class="section-title"><div><h3>Goals</h3><p>Progress household</p></div></div>${snapshot.goals.map((g) => `<div style="margin:12px 0"><div class="split"><b>${esc(g.name)}</b><span class="small muted">${pct(g.current, g.target)}%</span></div><div class="progress" style="margin:7px 0"><span style="width:${Math.min(100, pct(g.current, g.target))}%"></span></div><div class="small muted">${rupiah(g.current)} / ${rupiah(g.target)}</div></div>`).join("")}</div></div><div class="card" style="margin-top:16px"><div class="section-title"><div><h3>Transaksi terbaru</h3><p>Realtime dari semua member household.</p></div><button class="secondary" data-go="transactions">Lihat semua</button></div>${renderTxRows(monthTx().slice(0, 8))}</div></div>`;
+  app.innerHTML = `<div class="content">${exp > 15000000 ? `<div class="warning-banner"><b>Heads up:</b> pengeluaran bulan ini sudah ${rupiah(exp)}. Kita pakai ini sebagai sinyal untuk cek kebutuhan vs keinginan, bukan vonis boros.</div>` : ""}<div class="grid four"><div class="card card-metric"><div class="metric-label">Income</div><div class="metric-value" style="color:var(--good)">${rupiah(inc)}</div><div class="metric-foot">Bulan aktif</div></div><div class="card card-metric"><div class="metric-label">Spent</div><div class="metric-value" style="color:var(--bad)">${rupiah(exp)}</div><div class="metric-foot">${pct(exp, inc)}% dari income</div></div><div class="card card-metric"><div class="metric-label">Sisa cashflow</div><div class="metric-value">${rupiah(inc - exp)}</div><div class="metric-foot">Income - expense</div></div><div class="card card-metric"><div class="metric-label">Aman / hari</div><div class="metric-value">${rupiah(safeDay)}</div><div class="metric-foot">Hingga akhir bulan</div></div></div><div class="grid two" style="margin-top:14px"><div class="card"><div class="section-title"><div><h3>Insight finansial</h3><p>Rekomendasi arus kas keluarga.</p></div></div>${insightItems().map((x) => `<div class="insight ${x.kind}">${esc(x.text)}</div>`).join("")}</div><div class="card"><div class="section-title"><div><h3>Target keluarga</h3><p>Progress tabungan household</p></div><button class="secondary" data-go="goals"><span class="button-icon">${icon("arrow")}</span><span>Rincian</span></button></div>${snapshot.goals.map((g) => `<div style="margin:10px 0"><div class="split"><b>${esc(g.name)}</b><span class="small muted">${pct(g.current, g.target)}%</span></div><div class="progress" style="margin:6px 0"><span style="width:${Math.min(100, pct(g.current, g.target))}%"></span></div><div class="small muted">${rupiah(g.current)} / ${rupiah(g.target)}</div></div>`).join("")}</div></div><div class="card" style="margin-top:14px"><div class="section-title"><div><h3>Transaksi terbaru</h3><p>Update live dari semua member.</p></div><button class="secondary" data-go="transactions"><span class="button-icon">${icon("transactions")}</span><span>Lihat semua</span></button></div>${renderTxRows(monthTx().slice(0, 8))}</div></div>`;
   bindCommon();
 }
 function renderTxRows(rows) {
@@ -318,17 +314,17 @@ function renderTxRows(rows) {
   return rows
     .map(
       (t) =>
-        `<div class="tx-row"><div><b>${esc(t.note)}</b><div class="small muted">${esc(t.category_name || (t.type === "income" ? "Income" : "Tanpa kategori"))} · ${esc(t.created_by_name)} · ${esc(t.source)}</div>${t.goal_name ? `<span class="pill goal-pill">Tabungan ${esc(t.goal_name)}</span>` : ""}</div><div class="hide-mobile small">${esc(t.tx_date)}</div><div class="hide-mobile small">${esc(t.paid_by)}</div><div class="amount ${t.type}">${t.type === "expense" ? "-" : "+"}${rupiah(t.amount)}</div><button class="icon-btn delete-tx" data-id="${t.id}">×</button></div>`,
+        `<div class="tx-row"><div><b>${esc(t.note)}</b><div class="small muted">${esc(t.category_name || (t.type === "income" ? "Income" : "Tanpa kategori"))} · ${esc(t.created_by_name)} · ${esc(t.source)}</div>${t.goal_name ? `<span class="pill goal-pill">Tabungan ${esc(t.goal_name)}</span>` : ""}</div><div class="hide-mobile small">${esc(t.tx_date)}</div><div class="hide-mobile small">${esc(t.paid_by)}</div><div class="amount ${t.type}">${t.type === "expense" ? "-" : "+"}${rupiah(t.amount)}</div><button class="icon-btn danger-action delete-tx" data-id="${t.id}" title="Hapus transaksi" aria-label="Hapus transaksi">${icon("trash")}</button></div>`,
     )
     .join("");
 }
 function renderTransactions() {
-  app.innerHTML = `<div class="content"><div class="card"><div class="section-title"><div><h3>Semua transaksi</h3><p>${snapshot.transactions.length} transaksi tersimpan di server.</p></div><button id="addTx2" class="primary">+ Tambah</button></div>${renderTxRows(snapshot.transactions)}</div></div>`;
+  app.innerHTML = `<div class="content"><div class="card"><div class="section-title"><div><h3>Semua transaksi</h3><p>${snapshot.transactions.length} transaksi tersimpan di server.</p></div><button id="addTx2" class="primary"><span class="button-icon">${icon("plus")}</span><span>Catat baru</span></button></div>${renderTxRows(snapshot.transactions)}</div></div>`;
   bindCommon();
 }
 function renderBudget() {
   const inc = income();
-  app.innerHTML = `<div class="content"><div class="card"><div class="section-title"><div><h3>Auto allocation</h3><p>Total persentase boleh kamu atur. Nominal dihitung dari income bulan aktif.</p></div><button id="saveBudget" class="primary">Simpan</button></div>${snapshot.categories
+  app.innerHTML = `<div class="content"><div class="card"><div class="section-title"><div><h3>Auto allocation</h3><p>Persentase dihitung proporsional dari income bulan aktif.</p></div><button id="saveBudget" class="primary"><span class="button-icon">${icon("save")}</span><span>Simpan budget</span></button></div>${snapshot.categories
     .map((c) => {
       const spent = monthTx()
           .filter((t) => t.type === "expense" && t.category_id === c.id)
@@ -338,7 +334,7 @@ function renderBudget() {
     })
     .join(
       "",
-    )}<div class="insight">Total allocation: <b id="totalPct">${snapshot.categories.reduce((s, c) => s + Number(c.pct), 0)}%</b></div></div></div>`;
+    )}<div class="insight">Total alokasi budget: <b id="totalPct">${snapshot.categories.reduce((s, c) => s + Number(c.pct), 0)}%</b></div></div></div>`;
   document
     .querySelectorAll(".cat-pct")
     .forEach(
@@ -363,19 +359,19 @@ function renderBudget() {
   };
 }
 function renderGoals() {
-  app.innerHTML = `<div class="content"><div class="card"><div class="section-title"><div><h3>Target keluarga</h3><p>Setoran tabungan mengurangi sisa penghasilan dan otomatis menambah progres goal.</p></div><button id="saveGoals" class="primary">Simpan pengaturan</button></div>${snapshot.goals.map((goal) => {
+  app.innerHTML = `<div class="content"><div class="card"><div class="section-title"><div><h3>Target keluarga</h3><p>Setoran tabungan mengurangi sisa penghasilan dan otomatis menambah progres goal.</p></div><button id="saveGoals" class="primary"><span class="button-icon">${icon("save")}</span><span>Simpan target</span></button></div>${snapshot.goals.map((goal) => {
     const progress = pct(goal.current, goal.target);
     return `<div class="goal-row" data-id="${goal.id}">
-      <div class="goal-summary"><div><h3>${esc(goal.name)}</h3><div class="small muted">${goal.target_date ? `Target ${esc(goal.target_date)}` : "Tabungan keluarga"}</div></div><button type="button" class="secondary" data-save-goal="${goal.id}">+ Tabung</button></div>
+      <div class="goal-summary"><div><h3>${esc(goal.name)}</h3><div class="small muted">${goal.target_date ? `Target ${esc(goal.target_date)}` : "Tabungan keluarga"}</div></div><button type="button" class="secondary" data-save-goal="${goal.id}"><span class="button-icon">${icon("plus")}</span><span>Tabung</span></button></div>
       <div class="goal-total"><div><div class="small muted">Terkumpul otomatis</div><strong>${rupiah(goal.current)}</strong><span class="small muted"> / ${rupiah(goal.target)}</span></div><span class="pill">${progress}%</span></div>
       <div class="progress" role="progressbar" aria-label="Progres ${esc(goal.name)}" aria-valuenow="${Math.min(100, progress)}" aria-valuemin="0" aria-valuemax="100"><span style="width:${Math.min(100, progress)}%"></span></div>
       <div class="small muted">Saldo awal ${rupiah(goal.initial_balance)} + setoran tercatat ${rupiah(goal.contributed)}</div>
-      <details class="goal-settings"><summary>Pengaturan target &amp; saldo awal</summary><div class="goal-fields">
+      <details class="goal-settings"><summary><span class="button-icon">${icon("settings")}</span> Sesuaikan target &amp; saldo awal</summary><div class="goal-fields">
         <label>Nama goal<input class="goal-name" maxlength="60" required value="${esc(goal.name)}"></label>
         <label>Target (Rp)<input class="goal-target money-input" inputmode="numeric" autocomplete="off" value="${goal.target}"></label>
         <label>Saldo awal (Rp)<input class="goal-initial money-input" inputmode="numeric" autocomplete="off" value="${goal.initial_balance}"></label>
         <label>Tanggal target<input class="goal-date" type="date" value="${esc(goal.target_date || "")}"></label>
-      </div><p class="small">Saldo awal hanya untuk tabungan sebelum memakai aplikasi, bukan setoran baru. Catat setoran lewat tombol Tabung agar penghasilan tidak dipotong dua kali.</p></details>
+      </div><p class="small muted" style="margin-top:6px">Saldo awal hanya untuk tabungan sebelum memakai aplikasi, bukan setoran baru.</p></details>
     </div>`;
   }).join("")}</div></div>`;
   bindMoneyInputs(app);
@@ -522,9 +518,158 @@ function renderFamily() {
         .then(() => toast("Invite link dicopy"));
   });
 }
+async function renderUsers() {
+  if (!me.user.is_superadmin) {
+    app.innerHTML = `<div class="content"><div class="card"><div class="insight bad">Akses ditolak. Halaman ini hanya untuk superadmin.</div></div></div>`;
+    return;
+  }
+  app.innerHTML = `<div class="content"><div class="card"><div class="section-title"><div><h3>Kelola User</h3><p>Daftar pengguna terdaftar di sistem dan peran hak akses.</p></div><button id="addUserBtn" class="primary"><span class="button-icon">${icon("plus")}</span><span>Tambah User</span></button></div><div id="usersContainer" class="empty">Memuat daftar user...</div></div></div>`;
+  document.querySelector("#addUserBtn").onclick = () => openUserDialog();
+  await loadUsersList();
+}
+async function loadUsersList() {
+  const container = document.querySelector("#usersContainer");
+  try {
+    const res = await api("/api/admin/users");
+    if (!res.users.length) {
+      container.innerHTML = `<div class="empty">Belum ada user terdaftar.</div>`;
+      return;
+    }
+    container.className = "user-table-wrap";
+    container.innerHTML = `
+      <table class="user-table">
+        <thead>
+          <tr>
+            <th>Nama</th>
+            <th>Email</th>
+            <th>Status</th>
+            <th>Role</th>
+            <th>Household</th>
+            <th style="text-align:right">Aksi</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${res.users.map((u) => `
+            <tr>
+              <td><b>${esc(u.name)}</b>${u.id === me.user.id ? ` <span class="pill">Anda</span>` : ""}</td>
+              <td class="muted">${esc(u.email)}</td>
+              <td><span class="pill badge-${u.status}">${u.status === "active" ? "Aktif" : "Dinonaktifkan"}</span></td>
+              <td>${u.is_superadmin ? `<span class="pill badge-admin">Superadmin</span>` : `<span class="pill">Member</span>`}</td>
+              <td class="small muted">${u.households?.map((h) => esc(h.name)).join(", ") || "-"}</td>
+              <td>
+                <div class="user-actions">
+                  <button class="icon-btn edit-user" data-user='${esc(JSON.stringify(u))}' title="Edit user" aria-label="Edit user">${icon("edit")}</button>
+                  ${u.id !== me.user.id ? `<button class="icon-btn danger-action delete-user" data-id="${u.id}" data-name="${esc(u.name)}" title="Hapus user" aria-label="Hapus">${icon("trash")}</button>` : ""}
+                </div>
+              </td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>`;
+    container.querySelectorAll(".edit-user").forEach((btn) => {
+      btn.onclick = () => openUserDialog(JSON.parse(btn.dataset.user));
+    });
+    container.querySelectorAll(".delete-user").forEach((btn) => {
+      btn.onclick = async () => {
+        if (!confirm(`Hapus akun user "${btn.dataset.name}"? Transaksi yang sudah tercatat akan tetap aman.`)) return;
+        try {
+          await api(`/api/admin/users/${btn.dataset.id}`, { method: "DELETE" });
+          toast("User berhasil dihapus");
+          await loadUsersList();
+        } catch (err) {
+          toast(err.message);
+        }
+      };
+    });
+  } catch (err) {
+    container.className = "insight bad";
+    container.textContent = err.message;
+  }
+}
+function openUserDialog(userData = null) {
+  editingUserId = userData ? userData.id : null;
+  let dialog = document.querySelector("#userDialog");
+  if (!dialog) {
+    dialog = document.createElement("dialog");
+    dialog.id = "userDialog";
+    document.body.append(dialog);
+  }
+  dialog.innerHTML = `
+    <form method="dialog" id="userForm" class="dialog-card">
+      <div class="dialog-head">
+        <div>
+          <div class="kicker">Admin kontrol</div>
+          <h3>${userData ? "Edit User" : "Tambah User Baru"}</h3>
+        </div>
+        <button value="cancel" formnovalidate class="icon-btn" title="Tutup">×</button>
+      </div>
+      <label>Nama lengkap<input name="name" value="${esc(userData?.name || "")}" required placeholder="Misal: Budi Santoso"></label>
+      <label>Email<input name="email" type="email" value="${esc(userData?.email || "")}" required placeholder="budi@keluarga.id"></label>
+      <label>${userData ? "Password baru (kosongkan jika tidak diganti)" : "Password awal"}<input name="password" type="password" ${userData ? "" : "required minlength='12'"} placeholder="Minimal 12 karakter"></label>
+      <label class="check" style="margin-top:2px"><input name="isSuperadmin" type="checkbox" ${userData?.is_superadmin ? "checked" : ""}> Jadikan Superadmin</label>
+      <label>Status akun<select name="status"><option value="active" ${userData?.status !== "disabled" ? "selected" : ""}>Aktif</option><option value="disabled" ${userData?.status === "disabled" ? "selected" : ""}>Dinonaktifkan</option></select></label>
+      <div id="userFormError" class="insight bad hidden"></div>
+      <button class="primary wide" value="default" style="margin-top:6px">
+        <span class="button-icon">${icon("save")}</span>
+        <span>${userData ? "Simpan Perubahan" : "Buat Akun"}</span>
+      </button>
+    </form>`;
+  dialog.querySelector("button[value=cancel]").onclick = () => dialog.close();
+  dialog.querySelector("#userForm").onsubmit = async (e) => {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    const errBox = dialog.querySelector("#userFormError");
+    errBox.classList.add("hidden");
+    const payload = {
+      name: String(f.get("name") || ""),
+      email: String(f.get("email") || ""),
+      isSuperadmin: Boolean(f.get("isSuperadmin")),
+      status: String(f.get("status") || "active"),
+    };
+    const pwd = String(f.get("password") || "").trim();
+    if (pwd) payload.password = pwd;
+    try {
+      if (editingUserId) {
+        await api(`/api/admin/users/${editingUserId}`, {
+          method: "PUT",
+          body: JSON.stringify(payload),
+        });
+        toast("User berhasil diupdate");
+      } else {
+        if (!pwd || pwd.length < 12) throw new Error("Password minimal 12 karakter");
+        payload.householdId = activeHouseholdId;
+        await api("/api/admin/users", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+        toast("User baru berhasil dibuat");
+      }
+      dialog.close();
+      await loadUsersList();
+    } catch (err) {
+      errBox.textContent = err.message;
+      errBox.classList.remove("hidden");
+    }
+  };
+  dialog.showModal();
+}
 function renderSettings() {
-  app.innerHTML = `<div class="content"><div class="card"><div class="section-title"><div><h3>Household settings</h3><p>Guardrail bukan hukuman; dipakai sebagai alarm cashflow.</p></div></div><label>Nama household<input id="hhName" value="${esc(snapshot.household.name)}"></label><label style="margin-top:12px">Guardrail pengeluaran bulanan (Rp)<input id="monthlyLimit" class="money-input" inputmode="numeric" autocomplete="off" value="${snapshot.household.monthly_limit}"></label><button id="saveSettings" class="primary" style="margin-top:14px">Simpan</button></div></div>`;
+  app.innerHTML = `<div class="content"><div class="grid two"><div class="card"><div class="section-title"><div><h3>Household settings</h3><p>Batas guardrail pengeluaran untuk alarm cashflow keluarga.</p></div></div><label>Nama household<input id="hhName" value="${esc(snapshot.household.name)}"></label><label style="margin-top:12px">Guardrail pengeluaran bulanan (Rp)<input id="monthlyLimit" class="money-input" inputmode="numeric" autocomplete="off" value="${snapshot.household.monthly_limit}"></label><button id="saveSettings" class="primary" style="margin-top:14px"><span class="button-icon">${icon("save")}</span><span>Simpan Pengaturan</span></button></div><div class="card"><div class="section-title"><div><h3>Keamanan Akun</h3><p>Ganti password untuk akun yang sedang login.</p></div></div><form id="changePasswordForm"><label>Password saat ini<input name="currentPassword" type="password" required></label><label style="margin-top:10px">Password baru<input name="nextPassword" type="password" minlength="12" required placeholder="Minimal 12 karakter"></label><button class="secondary" style="margin-top:14px"><span class="button-icon">${icon("key")}</span><span>Ganti Password</span></button></form></div></div></div>`;
   bindMoneyInputs(app);
+  document.querySelector("#changePasswordForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    try {
+      await api("/api/account/password", {
+        method: "PUT",
+        body: JSON.stringify({ currentPassword: form.get("currentPassword"), password: form.get("nextPassword") }),
+      });
+      event.currentTarget.reset();
+      toast("Password berhasil diganti");
+    } catch (error) {
+      toast(error.message);
+    }
+  });
   document.querySelector("#saveSettings").onclick = async () => {
     try {
       if (!document.querySelector("#monthlyLimit").reportValidity()) return;
@@ -554,28 +699,47 @@ function openTx(prefill = {}) {
   f.receiptUrl.value = prefill.receiptUrl || "";
   f.externalRef.value = prefill.externalRef || "";
   f.need.checked = true;
-  fillCategories();
-  fillGoals();
-  if (prefill.categoryId !== undefined) f.category.value = prefill.categoryId;
-  if (prefill.goalId !== undefined) f.goalId.value = prefill.goalId || "";
+  setupFormSelects();
+  if (prefill.categoryId !== undefined && categoryControl) categoryControl.value = prefill.categoryId;
+  if (prefill.goalId !== undefined && goalControl) goalControl.value = prefill.goalId || "";
   else syncGoalFromCategory();
-  fillPaidBy();
   syncTypeButtons();
   bindMoneyInputs(f);
   d.showModal();
 }
-function fillCategories() {
-  document.querySelector("#txForm select[name=category]").innerHTML =
-    `<option value="">Tanpa kategori</option>` + snapshot.categories
-      .map((c) => `<option value="${c.id}">${esc(c.name)}</option>`)
-      .join("");
-  document.querySelector("#txForm select[name=category]").value = snapshot.categories[0]?.id || "";
-}
-function fillGoals() {
-  document.querySelector("#txForm select[name=goalId]").innerHTML =
-    `<option value="">Bukan setoran goal</option>` + snapshot.goals
-      .map((goal) => `<option value="${goal.id}">${esc(goal.name)}</option>`)
-      .join("");
+function setupFormSelects() {
+  const catContainer = document.querySelector("#categorySelect");
+  const catOptions = [{ value: "", label: "Tanpa kategori" }, ...snapshot.categories.map((c) => ({ value: c.id, label: c.name }))];
+  categoryControl = searchableSelect(catContainer, {
+    name: "category",
+    label: "Kategori",
+    options: catOptions,
+    value: snapshot.categories[0]?.id || "",
+    onChange: () => syncGoalFromCategory(),
+  });
+
+  const goalContainer = document.querySelector("#goalSelect");
+  const goalOptions = [{ value: "", label: "Bukan setoran goal" }, ...snapshot.goals.map((g) => ({ value: g.id, label: `Tabungan ${g.name}` }))];
+  goalControl = searchableSelect(goalContainer, {
+    name: "goalId",
+    label: "Goal",
+    options: goalOptions,
+    value: "",
+    onChange: (selectedGoalId) => {
+      const cat = categoryForGoal(selectedGoalId);
+      if (cat && categoryControl) categoryControl.value = cat.id;
+      syncGoalHint();
+    },
+  });
+
+  const paidByContainer = document.querySelector("#paidBySelect");
+  const paidByOptions = [{ value: "shared", label: "Shared (Bersama)" }, ...snapshot.members.map((m) => ({ value: m.id, label: m.name }))];
+  paidByControl = searchableSelect(paidByContainer, {
+    name: "paidBy",
+    label: "Dibayar oleh",
+    options: paidByOptions,
+    value: "shared",
+  });
 }
 function categoryForGoal(goalId) {
   const goal = snapshot.goals.find((item) => item.id === goalId);
@@ -585,20 +749,18 @@ function categoryForGoal(goalId) {
 }
 function syncGoalFromCategory() {
   const form = document.querySelector("#txForm");
-  const category = snapshot.categories.find((item) => item.id === form.category.value);
+  const catVal = categoryControl ? categoryControl.value : form.category?.value;
+  const category = snapshot.categories.find((item) => item.id === catVal);
   const matches = snapshot.goals.filter((goal) => category?.name.trim().toLowerCase() === `target ${goal.name.trim().toLowerCase()}`);
-  form.goalId.value = form.type.value === "expense" && matches.length === 1 ? matches[0].id : "";
+  const nextGoalId = form.type.value === "expense" && matches.length === 1 ? matches[0].id : "";
+  if (goalControl) goalControl.value = nextGoalId;
   syncGoalHint();
 }
 function syncGoalHint() {
-  const goalId = document.querySelector("#txForm select[name=goalId]").value;
+  const goalId = goalControl ? goalControl.value : "";
   document.querySelector("#goalHint").textContent = goalId
     ? "Setoran ini mengurangi sisa penghasilan sekali dan menambah saldo goal."
     : "Pengeluaran biasa tidak menambah saldo goal.";
-}
-function fillPaidBy() {
-  document.querySelector("#txForm select[name=paidBy]").innerHTML =
-    `<option value="shared">Shared</option>${snapshot.members.map((m) => `<option value="${m.id}">${esc(m.name)}</option>`).join("")}`;
 }
 function syncTypeButtons() {
   const f = document.querySelector("#txForm"),
@@ -612,8 +774,7 @@ function syncTypeButtons() {
     val === "income" ? "none" : "flex";
   document.querySelector(".goal-allocation-row").style.display =
     val === "income" ? "none" : "grid";
-  f.goalId.disabled = val === "income";
-  if (val === "income") f.goalId.value = "";
+  if (val === "income" && goalControl) goalControl.value = "";
   syncGoalHint();
 }
 function bindCommon() {
@@ -658,12 +819,20 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") setSidebarOpen(false);
 });
 document.querySelector("#quickAdd").onclick = () => openTx();
-document.querySelector("#txForm select[name=category]").onchange = syncGoalFromCategory;
-document.querySelector("#txForm select[name=goalId]").onchange = (event) => {
-  const category = categoryForGoal(event.target.value);
-  if (category) document.querySelector("#txForm select[name=category]").value = category.id;
-  syncGoalHint();
-};
+document.querySelectorAll("dialog").forEach((dialog) => {
+  dialog.addEventListener("close", closeSelects);
+});
+const navigationIcons = { dashboard: "home", transactions: "transactions", budget: "budget", goals: "goals", receipts: "receipt", family: "users", users: "shield", settings: "settings" };
+document.querySelectorAll(".nav").forEach((button) => {
+  button.querySelector(".nav-icon").innerHTML = icon(navigationIcons[button.dataset.view]);
+});
+document.querySelector("#toggleSidebar").innerHTML = icon("menu");
+document.querySelector("#quickAdd").innerHTML = icon("plus");
+document.querySelector("#quickAdd").title = "Catat transaksi";
+document.querySelector("#quickAdd").setAttribute("aria-label", "Catat transaksi");
+document.querySelector("#quickAdd").classList.add("quick-add");
+document.querySelector("#txForm button[value=cancel]").innerHTML = icon("close");
+document.querySelector("#txForm button[value=default] .button-icon").innerHTML = icon("check");
 document.querySelectorAll(".type-btn").forEach(
   (b) =>
     (b.onclick = () => {

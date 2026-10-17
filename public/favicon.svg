@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- Deep Obsidian Slate base with micro inset -->
+  <rect width="64" height="64" rx="16" fill="#141324" />
+  <rect x="2" y="2" width="60" height="60" rx="14" stroke="#ffffff" stroke-opacity="0.08" stroke-width="1.5" />
+
+  <!-- Ribbon 1: Vertical core stem (Royal Indigo) -->
+  <rect x="16" y="14" width="7" height="36" rx="3.5" fill="#4f46e5" />
+
+  <!-- Ribbon 2: Continuous upper arch of 'B' flowing around -->
+  <path d="M21 16H34C40.5 16 45 20.2 45 25.5C45 30.8 40.5 35 34 35H21" stroke="#818cf8" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" />
+
+  <!-- Ribbon 3: Upward K branch with Wine-Rose accent (collaborative spark) -->
+  <path d="M29 31L46 16" stroke="#f43f5e" stroke-width="6" stroke-linecap="round" />
+
+  <!-- Ribbon 4: Downward grounding leg of K -->
+  <path d="M27 34L47 49" stroke="#6366f1" stroke-width="6" stroke-linecap="round" />
+
+  <!-- Balanced pivot point -->
+  <circle cx="30" cy="32.5" r="3.2" fill="#ffffff" />
+</svg>

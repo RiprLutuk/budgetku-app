@@ -3,7 +3,9 @@
   "short_name": "BudgetKu",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f5f7fb",
-  "theme_color": "#111827",
-  "icons": []
+  "background_color": "#f7f7fb",
+  "theme_color": "#19182a",
+  "icons": [
+    {"src":"/favicon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}
+  ]
 }

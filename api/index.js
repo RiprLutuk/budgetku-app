@@ -4,28 +4,10 @@ import { bodyLimit } from "hono/body-limit";
 import crypto from "node:crypto";
 import { getDb, queryOne } from "../lib/db.js";
 import { GOAL_FOR_CATEGORY_SQL, GOALS_SNAPSHOT_SQL } from "../lib/goals.js";
+import { ensureSuperadmin, hashPassword, mountAdminRoutes } from "../lib/admin.js";
 
 const app = new Hono();
 
-const DEFAULT_BUDGET = [
-  ["Kontrakan / Rumah", 25],
-  ["Makan Harian", 12],
-  ["Belanja Bulanan", 8],
-  ["Pendidikan", 10],
-  ["Transport", 7],
-  ["Tagihan & Utilitas", 5],
-  ["Kesehatan", 3],
-  ["Dana Darurat", 10],
-  ["Target Rumah", 8],
-  ["Target Mobil", 5],
-  ["Target Umroh", 4],
-  ["Lifestyle", 3],
-];
-const DEFAULT_GOALS = [
-  ["Rumah", 500000000],
-  ["Mobil", 200000000],
-  ["Umroh", 75000000],
-];
 const now = () => new Date().toISOString();
 const id = () => crypto.randomUUID();
 const token = (bytes = 32) => crypto.randomBytes(bytes).toString("base64url");
@@ -49,10 +31,6 @@ async function readJson(c) {
     throw new HTTPException(400, { message: "JSON harus berupa objek" });
   }
   return body;
-}
-function hashPassword(password, salt = token(16)) {
-  const hash = crypto.pbkdf2Sync(String(password), salt, 120000, 32, "sha256").toString("base64url");
-  return `${salt}.${hash}`;
 }
 function legacyPasswordHash(password) {
   return crypto.createHash("sha256").update(String(password)).digest("hex");
@@ -87,9 +65,9 @@ async function currentUser(c) {
   const sid = cookie(c, "budgetku_session");
   if (!sid) return null;
   return queryOne(db, 
-    `SELECT u.id,u.email,u.name,s.expires_at
+    `SELECT u.id,u.email,u.name,u.is_superadmin,u.status,s.expires_at
      FROM sessions s JOIN users u ON u.id=s.user_id
-     WHERE s.id=? AND s.expires_at>?`,
+     WHERE s.id=? AND s.expires_at>? AND u.status='active'`,
     [sid, now()],
   );
 }
@@ -225,6 +203,7 @@ const headerValue = (headers, name) => headers.find((header) => header.name?.toL
 async function initialize(c, next) {
   c.header("Cache-Control", "no-store");
   c.header("X-Content-Type-Options", "nosniff");
+  if (c.env?.DB) await ensureSuperadmin(getDb(c.env.DB), c.env);
   await next();
 }
 app.use("/api/*", initialize);
@@ -247,52 +226,13 @@ app.notFound((c) => json(c, { error: "Endpoint tidak ditemukan" }, 404));
 
 app.get("/health", (c) => json(c, { ok: true, db: "d1" }));
 
-app.post("/api/auth/register", async (c) => {
-  const db = getDb(c.env.DB);
-  const body = await readJson(c);
-  const email = normEmail(body.email);
-  const name = String(body.name || "").trim();
-  const password = String(body.password || "");
-  const householdName = String(body.householdName || "Keluarga Kita").trim() || "Keluarga Kita";
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254 || name.length < 2 || name.length > 100 || password.length < 6 || password.length > 1024 || householdName.length > 100) {
-    return json(c, { error: "Nama, email, dan password minimal 6 karakter wajib diisi" }, 400);
-  }
-  const userId = id();
-  const householdId = id();
-  const sessionId = token();
-  const createdAt = now();
-  const statements = [
-    { sql: "INSERT INTO users(id,email,name,password_hash,created_at) VALUES(?,?,?,?,?)", args: [userId, email, name, hashPassword(password), createdAt] },
-    { sql: "INSERT INTO households(id,name,owner_id,monthly_limit,created_at) VALUES(?,?,?,?,?)", args: [householdId, householdName, userId, 15000000, createdAt] },
-    { sql: "INSERT INTO household_members(household_id,user_id,role,joined_at) VALUES(?,?,?,?)", args: [householdId, userId, "owner", createdAt] },
-    { sql: "INSERT INTO sessions(id,user_id,expires_at) VALUES(?,?,?)", args: [sessionId, userId, new Date(Date.now() + 30 * 86400000).toISOString()] },
-    { sql: "INSERT INTO household_defaults(household_id,initialized_at) VALUES(?,?)", args: [householdId, createdAt] },
-  ];
-  DEFAULT_BUDGET.forEach(([categoryName, pct], sortOrder) => statements.push({
-    sql: "INSERT INTO categories(id,household_id,name,pct,sort_order) VALUES(?,?,?,?,?)",
-    args: [id(), householdId, categoryName, pct, sortOrder],
-  }));
-  DEFAULT_GOALS.forEach(([goalName, target], sortOrder) => statements.push({
-    sql: "INSERT INTO goals(id,household_id,name,target,current,sort_order) VALUES(?,?,?,?,?,?)",
-    args: [id(), householdId, goalName, target, 0, sortOrder],
-  }));
-  try {
-    await db.batch(statements);
-  } catch (error) {
-    if (String(error.message).includes("users.email")) return json(c, { error: "Email sudah terdaftar" }, 409);
-    throw error;
-  }
-  c.header("Set-Cookie", sessionCookie(c, sessionId));
-  return json(c, { ok: true });
-});
-
 app.post("/api/auth/login", async (c) => {
   const db = getDb(c.env.DB);
   const body = await readJson(c);
   const password = String(body.password || "");
   if (!password || password.length > 1024) return json(c, { error: "Email atau password salah" }, 401);
   const user = await queryOne(db, "SELECT * FROM users WHERE email=?", [normEmail(body.email)]);
-  if (!user || !verifyPassword(password, user.password_hash)) return json(c, { error: "Email atau password salah" }, 401);
+  if (!user || user.status !== "active" || !verifyPassword(password, user.password_hash)) return json(c, { error: "Email atau password salah" }, 401);
   if (!user.password_hash.includes(".")) {
     await db.execute({ sql: "UPDATE users SET password_hash=? WHERE id=?", args: [hashPassword(body.password), user.id] });
   }
@@ -302,6 +242,24 @@ app.post("/api/auth/login", async (c) => {
     args: [sessionId, user.id, new Date(Date.now() + 30 * 86400000).toISOString()],
   });
   c.header("Set-Cookie", sessionCookie(c, sessionId));
+  return json(c, { ok: true });
+});
+
+app.put("/api/account/password", async (c) => {
+  const user = await requireUser(c);
+  const db = getDb(c.env.DB);
+  const body = await readJson(c);
+  const currentPassword = body.currentPassword;
+  const nextPassword = body.password;
+  if (typeof currentPassword !== "string" || currentPassword.length > 1024 || typeof nextPassword !== "string" || nextPassword.length < 12 || nextPassword.length > 1024) {
+    return json(c, { error: "Password baru minimal 12 karakter" }, 400);
+  }
+  const saved = await queryOne(db, "SELECT password_hash FROM users WHERE id=?", [user.id]);
+  if (!verifyPassword(currentPassword, saved.password_hash)) return json(c, { error: "Password saat ini tidak cocok" }, 400);
+  await db.batch([
+    { sql: "UPDATE users SET password_hash=? WHERE id=?", args: [hashPassword(nextPassword), user.id] },
+    { sql: "DELETE FROM sessions WHERE user_id=? AND id!=?", args: [user.id, cookie(c, "budgetku_session")] },
+  ]);
   return json(c, { ok: true });
 });
 
@@ -323,8 +281,10 @@ app.get("/api/me", async (c) => {
           WHERE m.user_id=? ORDER BY h.created_at`,
     args: [user.id],
   });
-  return json(c, { user: { id: user.id, email: user.email, name: user.name }, households: result.rows });
+  return json(c, { user: { id: user.id, email: user.email, name: user.name, is_superadmin: Boolean(user.is_superadmin) }, households: result.rows });
 });
+
+mountAdminRoutes(app, { getDb, requireUser, readJson });
 
 app.get("/api/snapshot", async (c) => {
   const db = getDb(c.env.DB);

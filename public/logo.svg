@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 50" fill="none">
+  <rect x="2" y="3" width="44" height="44" rx="13" fill="#141324" />
+  <rect x="3.5" y="4.5" width="41" height="41" rx="11.5" stroke="#ffffff" stroke-opacity="0.08" stroke-width="1.2" />
+
+  <!-- Interlocking BK Knot -->
+  <rect x="14" y="13" width="5.5" height="24" rx="2.75" fill="#4f46e5" />
+  <path d="M18 15H27C31.5 15 35 18 35 22C35 26 31.5 29 27 29H18" stroke="#818cf8" stroke-width="4.2" stroke-linecap="round" />
+  <path d="M24 26L37 14" stroke="#f43f5e" stroke-width="4.2" stroke-linecap="round" />
+  <path d="M22 28L38 39" stroke="#6366f1" stroke-width="4.2" stroke-linecap="round" />
+  <circle cx="25" cy="27" r="2.2" fill="#ffffff" />
+
+  <!-- Typography in Plus Jakarta Sans -->
+  <text x="56" y="26" fill="#19182a" font-family="'Plus Jakarta Sans', system-ui, sans-serif" font-size="19" font-weight="800" letter-spacing="-0.03em">Budget<tspan fill="#4f46e5">Ku</tspan></text>
+  <text x="56.5" y="39" fill="#6b6b83" font-family="'Plus Jakarta Sans', system-ui, sans-serif" font-size="9" font-weight="700" letter-spacing="0.08em">FAMILY LEDGER &amp; GOALS</text>
+</svg>
