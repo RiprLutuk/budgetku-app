@@ -1,0 +1,10 @@
+services:
+  budgetku:
+    build: .
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    volumes:
+      - ./budgetku-data:/data
+    restart: unless-stopped

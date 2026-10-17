@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#111827" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="stylesheet" href="/app.css" />
+  <title>BudgetKu Family</title>
+</head>
+<body>
+  <div id="authScreen" class="auth-screen hidden"></div>
+  <div id="shell" class="app-shell hidden">
+    <aside id="sidebar" class="sidebar">
+      <div class="brand"><span class="brand-mark">B</span><div><b>BudgetKu</b><small>Family Money Tracker</small></div></div>
+      <div id="householdSwitcher" class="household-switcher"></div>
+      <nav>
+        <button data-view="dashboard" class="nav active">⌂ <span>Dashboard</span></button>
+        <button data-view="transactions" class="nav">↕ <span>Transaksi</span></button>
+        <button data-view="budget" class="nav">◫ <span>Auto Budget</span></button>
+        <button data-view="goals" class="nav">◎ <span>Goals</span></button>
+        <button data-view="receipts" class="nav">▤ <span>Nota & Gmail</span></button>
+        <button data-view="family" class="nav">♧ <span>Family</span></button>
+        <button data-view="settings" class="nav">⚙ <span>Settings</span></button>
+      </nav>
+      <div class="side-note" id="userMini"></div>
+    </aside>
+    <button id="sidebarBackdrop" class="sidebar-backdrop" aria-label="Tutup navigasi" tabindex="-1"></button>
+
+    <main>
+      <header class="topbar">
+        <button id="toggleSidebar" class="icon-btn" aria-label="Buka navigasi" aria-controls="sidebar" aria-expanded="false">☰</button>
+        <div><h1 id="pageTitle">Dashboard</h1><p id="monthLabel"></p></div>
+        <button id="quickAdd" class="primary">+ Transaksi</button>
+      </header>
+      <section id="app"></section>
+    </main>
+  </div>
+
+  <dialog id="txDialog">
+    <form method="dialog" id="txForm" class="dialog-card">
+      <div class="dialog-head"><h3>Tambah transaksi</h3><button value="cancel" formnovalidate class="icon-btn" aria-label="Tutup dialog">×</button></div>
+      <div class="segmented"><button type="button" data-type="expense" class="type-btn active">Pengeluaran</button><button type="button" data-type="income" class="type-btn">Pemasukan</button></div>
+      <input type="hidden" name="type" value="expense" />
+      <label>Nominal (Rp)<input name="amount" class="money-input" inputmode="numeric" placeholder="150.000" autocomplete="off" required /></label>
+      <label>Nama / catatan<input name="note" placeholder="Belanja bulanan" required /></label>
+      <label class="category-row">Kategori<select name="category"></select></label>
+      <label class="goal-allocation-row">Alokasi tabungan / goal (opsional)<select name="goalId" aria-describedby="goalHint"></select><span id="goalHint" class="small muted field-help"></span></label>
+      <label>Tanggal<input name="date" type="date" required /></label>
+      <label>Dibayar oleh<select name="paidBy"><option value="shared">Shared</option></select></label>
+      <label class="check need-row"><input name="need" type="checkbox" checked /> Ini kebutuhan, bukan keinginan</label>
+      <input type="hidden" name="source" value="manual" />
+      <input type="hidden" name="receiptUrl" />
+      <input type="hidden" name="externalRef" />
+      <button class="primary wide" value="default">Simpan</button>
+    </form>
+  </dialog>
+
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
