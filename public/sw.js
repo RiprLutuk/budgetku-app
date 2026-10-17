@@ -1,4 +1,4 @@
-const CACHE = 'budgetku-family-v9-brand';
+const CACHE = 'budgetku-family-v10-layout';
 const ASSETS = [
   '/',
   '/index.html',

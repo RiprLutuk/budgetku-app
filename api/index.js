@@ -5,6 +5,7 @@ import crypto from "node:crypto";
 import { getDb, queryOne } from "../lib/db.js";
 import { GOAL_FOR_CATEGORY_SQL, GOALS_SNAPSHOT_SQL } from "../lib/goals.js";
 import { ensureSuperadmin, hashPassword, mountAdminRoutes, needsPasswordRehash, verifyPassword } from "../lib/admin.js";
+import { googleOAuthConfig, isGoogleOAuthConfigured } from "../lib/oauth.js";
 
 const app = new Hono();
 
@@ -96,9 +97,6 @@ async function validateOwnedRows(db, table, rows, householdId) {
   });
   if (result.rows.length !== ids.length) throw new HTTPException(400, { message: "Data bukan milik household aktif" });
 }
-function gmailConfigured(env) {
-  return Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.GOOGLE_REDIRECT_URI);
-}
 async function gmailToken(db, userId) {
   const row = await queryOne(db, "SELECT token_json FROM gmail_tokens WHERE user_id=?", [userId]);
   return row ? JSON.parse(row.token_json) : null;
@@ -111,13 +109,14 @@ async function saveGmailToken(db, userId, value) {
   });
 }
 async function exchangeCode(c, code) {
-  const env = c.env;
+  const config = await googleOAuthConfig(getDb(c.env.DB), c.env, c.req.url);
+  if (!isGoogleOAuthConfigured(config)) throw new HTTPException(400, { message: 'Integrasi Gmail belum diatur di Settings' });
   const params = new URLSearchParams({
-    client_id: env.GOOGLE_CLIENT_ID,
-    client_secret: env.GOOGLE_CLIENT_SECRET,
+    client_id: config.clientId,
+    client_secret: config.clientSecret,
     code,
     grant_type: "authorization_code",
-    redirect_uri: env.GOOGLE_REDIRECT_URI,
+    redirect_uri: config.redirectUri,
   });
   const response = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
@@ -129,15 +128,16 @@ async function exchangeCode(c, code) {
   return { ...data, expires_at: Date.now() + (data.expires_in || 3600) * 1000 };
 }
 async function gmailAccess(c, userId) {
-  const env = c.env;
-  const db = getDb(env.DB);
+  const db = getDb(c.env.DB);
+  const config = await googleOAuthConfig(db, c.env, c.req.url);
+  if (!isGoogleOAuthConfigured(config)) throw new HTTPException(400, { message: 'Integrasi Gmail belum diatur di Settings' });
   let saved = await gmailToken(db, userId);
   if (!saved) throw new Error("Gmail belum terkoneksi");
   if (saved.expires_at && saved.expires_at > Date.now() + 60000) return saved.access_token;
   if (!saved.refresh_token) return saved.access_token;
   const params = new URLSearchParams({
-    client_id: env.GOOGLE_CLIENT_ID,
-    client_secret: env.GOOGLE_CLIENT_SECRET,
+    client_id: config.clientId,
+    client_secret: config.clientSecret,
     refresh_token: saved.refresh_token,
     grant_type: "refresh_token",
   });
@@ -270,7 +270,7 @@ app.get("/api/me", async (c) => {
   return json(c, { user: { id: user.id, email: user.email, name: user.name, is_superadmin: Boolean(user.is_superadmin) }, households: result.rows });
 });
 
-mountAdminRoutes(app, { getDb, requireUser, readJson });
+mountAdminRoutes(app, { getDb, requireUser, requireHousehold, readJson });
 
 app.get("/api/snapshot", async (c) => {
   const db = getDb(c.env.DB);
@@ -479,17 +479,20 @@ app.get("/api/gmail/status", async (c) => {
   const db = getDb(c.env.DB);
   const user = await requireUser(c);
   if (!user) return;
-  return json(c, { configured: gmailConfigured(c.env), connected: Boolean(await gmailToken(db, user.id)) });
+  const config = await googleOAuthConfig(db, c.env, c.req.url);
+  const configured = isGoogleOAuthConfigured(config);
+  return json(c, { configured, connected: configured && Boolean(await gmailToken(db, user.id)) });
 });
 
 app.get("/auth/google", async (c) => {
   const db = getDb(c.env.DB);
   const user = await requireUser(c);
   if (!user) return;
-  if (!gmailConfigured(c.env)) return c.text("Google OAuth belum dikonfigurasi di Worker.", 400);
+  const config = await googleOAuthConfig(db, c.env, c.req.url);
+  if (!isGoogleOAuthConfigured(config)) return c.text("Google OAuth belum diatur. Buka Settings sebagai superadmin.", 400);
   const state = token(24);
   await db.execute({ sql: "INSERT INTO oauth_states(state,user_id,expires_at) VALUES(?,?,?)", args: [state, user.id, new Date(Date.now() + 10 * 60000).toISOString()] });
-  const params = new URLSearchParams({ client_id: c.env.GOOGLE_CLIENT_ID, redirect_uri: c.env.GOOGLE_REDIRECT_URI, response_type: "code", access_type: "offline", prompt: "consent", include_granted_scopes: "true", scope: "https://www.googleapis.com/auth/gmail.readonly", state });
+  const params = new URLSearchParams({ client_id: config.clientId, redirect_uri: config.redirectUri, response_type: "code", access_type: "offline", prompt: "consent", include_granted_scopes: "true", scope: "https://www.googleapis.com/auth/gmail.readonly", state });
   c.header("Location", `https://accounts.google.com/o/oauth2/v2/auth?${params}`);
   return c.body(null, 302);
 });

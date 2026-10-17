@@ -4,7 +4,7 @@ import { closeSelects, icon, searchableSelect } from "./ui.js";
 let me = null,
   snapshot = null,
   currentView = "dashboard",
-  activeHouseholdId = localStorage.getItem("budgetku.household") || "",
+  activeHouseholdId = "",
   pollTimer = null,
   eventSource = null,
   snapshotRequestId = 0,
@@ -13,7 +13,6 @@ let me = null,
   categoryControl = null,
   goalControl = null,
   paidByControl = null,
-  householdControl = null,
   editingUserId = null;
 const app = document.querySelector("#app"),
   authScreen = document.querySelector("#authScreen"),
@@ -65,18 +64,13 @@ async function api(url, opt = {}) {
 async function boot() {
   try {
     me = await api("/api/me");
-    if (
-      !activeHouseholdId ||
-      !me.households.some((h) => h.id === activeHouseholdId)
-    )
-      activeHouseholdId = me.households[0]?.id || "";
+    activeHouseholdId = me.households[0]?.id || "";
     if (pendingJoin) {
       const j = await api(
         `/api/invites/${encodeURIComponent(pendingJoin)}/join`,
         { method: "POST" },
       );
       activeHouseholdId = j.householdId;
-      localStorage.setItem("budgetku.household", activeHouseholdId);
       pendingJoin = null;
       history.replaceState({}, "", location.pathname);
       me = await api("/api/me");
@@ -179,17 +173,6 @@ function renderChrome() {
   ).format(new Date(`${currentMonth}-01T00:00:00`));
   document.querySelectorAll(".admin-only").forEach((el) => {
     el.classList.toggle("hidden", !me.user.is_superadmin);
-  });
-  householdControl = searchableSelect(document.querySelector("#householdSwitcher"), {
-    name: "activeHousehold",
-    label: "Household",
-    value: activeHouseholdId,
-    options: me.households.map((h) => ({ value: h.id, label: h.name })),
-    onChange: async (nextId) => {
-      activeHouseholdId = nextId;
-      localStorage.setItem("budgetku.household", activeHouseholdId);
-      await loadSnapshot();
-    },
   });
   document.querySelector("#userMini").innerHTML =
     `<div class="side-user-meta"><b>${esc(me.user.name)}</b><span class="small muted">${esc(me.user.email)}</span>${me.user.is_superadmin ? `<span class="pill badge-admin" style="margin-top:2px;width:max-content">Superadmin</span>` : ""}</div><button id="logoutBtn" class="secondary" style="margin-top:8px;width:100%"><span class="button-icon">${icon("logout")}</span><span>Keluar</span></button>`;
@@ -453,7 +436,7 @@ async function loadGmailStatus() {
   try {
     const s = await api("/api/gmail/status");
     if (!s.configured) {
-      box.innerHTML = `<div class="insight warn">OAuth belum dikonfigurasi di <code>.env</code>.</div>`;
+      box.innerHTML = `<div class="insight warn">Gmail belum diatur. Superadmin bisa mengisinya dari Settings.</div>`;
       return;
     }
     if (!s.connected) {
@@ -544,7 +527,6 @@ async function loadUsersList() {
             <th>Email</th>
             <th>Status</th>
             <th>Role</th>
-            <th>Household</th>
             <th style="text-align:right">Aksi</th>
           </tr>
         </thead>
@@ -555,7 +537,6 @@ async function loadUsersList() {
               <td class="muted">${esc(u.email)}</td>
               <td><span class="pill badge-${u.status}">${u.status === "active" ? "Aktif" : "Dinonaktifkan"}</span></td>
               <td>${u.is_superadmin ? `<span class="pill badge-admin">Superadmin</span>` : `<span class="pill">Member</span>`}</td>
-              <td class="small muted">${u.households?.map((h) => esc(h.name)).join(", ") || "-"}</td>
               <td>
                 <div class="user-actions">
                   <button class="icon-btn edit-user" data-user='${esc(JSON.stringify(u))}' title="Edit user" aria-label="Edit user">${icon("edit")}</button>
@@ -637,7 +618,6 @@ function openUserDialog(userData = null) {
         toast("User berhasil diupdate");
       } else {
         if (!pwd || pwd.length < 12) throw new Error("Password minimal 12 karakter");
-        payload.householdId = activeHouseholdId;
         await api("/api/admin/users", {
           method: "POST",
           body: JSON.stringify(payload),
@@ -654,7 +634,7 @@ function openUserDialog(userData = null) {
   dialog.showModal();
 }
 function renderSettings() {
-  app.innerHTML = `<div class="content"><div class="grid two"><div class="card"><div class="section-title"><div><h3>Household settings</h3><p>Batas guardrail pengeluaran untuk alarm cashflow keluarga.</p></div></div><label>Nama household<input id="hhName" value="${esc(snapshot.household.name)}"></label><label style="margin-top:12px">Guardrail pengeluaran bulanan (Rp)<input id="monthlyLimit" class="money-input" inputmode="numeric" autocomplete="off" value="${snapshot.household.monthly_limit}"></label><button id="saveSettings" class="primary" style="margin-top:14px"><span class="button-icon">${icon("save")}</span><span>Simpan Pengaturan</span></button></div><div class="card"><div class="section-title"><div><h3>Keamanan Akun</h3><p>Ganti password untuk akun yang sedang login.</p></div></div><form id="changePasswordForm"><label>Password saat ini<input name="currentPassword" type="password" required></label><label style="margin-top:10px">Password baru<input name="nextPassword" type="password" minlength="12" required placeholder="Minimal 12 karakter"></label><button class="secondary" style="margin-top:14px"><span class="button-icon">${icon("key")}</span><span>Ganti Password</span></button></form></div></div></div>`;
+  app.innerHTML = `<div class="content"><div class="grid two"><div class="card"><div class="section-title"><div><h3>Household settings</h3><p>Batas guardrail pengeluaran untuk alarm cashflow keluarga.</p></div></div><label>Nama household<input id="hhName" value="${esc(snapshot.household.name)}"></label><label style="margin-top:12px">Guardrail pengeluaran bulanan (Rp)<input id="monthlyLimit" class="money-input" inputmode="numeric" autocomplete="off" value="${snapshot.household.monthly_limit}"></label><button id="saveSettings" class="primary" style="margin-top:14px"><span class="button-icon">${icon("save")}</span><span>Simpan Pengaturan</span></button></div><div class="card"><div class="section-title"><div><h3>Keamanan Akun</h3><p>Ganti password untuk akun yang sedang login.</p></div></div><form id="changePasswordForm"><label>Password saat ini<input name="currentPassword" type="password" required></label><label style="margin-top:10px">Password baru<input name="nextPassword" type="password" minlength="12" required placeholder="Minimal 12 karakter"></label><button class="secondary" style="margin-top:14px"><span class="button-icon">${icon("key")}</span><span>Ganti Password</span></button></form></div>${me.user.is_superadmin ? `<div class="card"><div class="section-title"><div><h3>Integrasi Google</h3><p>Atur Gmail read-only tanpa perlu mengedit <code>.env</code>.</p></div></div><form id="googleSettingsForm"><label>Google Client ID<input id="googleClientId" name="clientId" autocomplete="off" required></label><label style="margin-top:10px">Google Client Secret<input id="googleClientSecret" name="clientSecret" type="password" autocomplete="new-password" placeholder="Kosongkan jika tidak berubah"></label><label style="margin-top:10px">Redirect URI<input id="googleRedirectUri" name="redirectUri" autocomplete="url" required></label><div id="googleSettingsStatus" class="small muted" style="margin-top:10px">Memuat konfigurasi...</div><div class="actions" style="margin-top:14px"><button class="primary" type="submit"><span class="button-icon">${icon("save")}</span><span>Simpan Integrasi</span></button><button class="danger" type="button" id="clearGoogleSettings">Hapus Konfigurasi</button></div></form></div>` : ""}</div></div>`;
   bindMoneyInputs(app);
   document.querySelector("#changePasswordForm")?.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -684,6 +664,47 @@ function renderSettings() {
       await refreshSnapshot().catch(() => {});
     } catch (error) {
       toast(error.message);
+    }
+  };
+  if (me.user.is_superadmin) loadGoogleSettings();
+}
+
+async function loadGoogleSettings() {
+  const form = document.querySelector("#googleSettingsForm");
+  if (!form) return;
+  const status = document.querySelector("#googleSettingsStatus");
+  try {
+    const settings = await api("/api/admin/integrations/google");
+    form.elements.clientId.value = settings.clientId || "";
+    form.elements.redirectUri.value = settings.redirectUri || `${location.origin}/auth/google/callback`;
+    status.textContent = settings.configured ? "Google OAuth aktif. Secret tersimpan dan tidak ditampilkan." : "Belum dikonfigurasi.";
+  } catch (error) {
+    status.textContent = error.message;
+  }
+  form.onsubmit = async (event) => {
+    event.preventDefault();
+    const data = new FormData(form);
+    try {
+      await api("/api/admin/integrations/google", {
+        method: "PUT",
+        body: JSON.stringify(Object.fromEntries(data)),
+      });
+      status.textContent = "Google OAuth aktif. Secret tersimpan dan tidak ditampilkan.";
+      toast("Integrasi Google tersimpan");
+    } catch (error) {
+      status.textContent = error.message;
+    }
+  };
+  document.querySelector("#clearGoogleSettings").onclick = async () => {
+    if (!confirm("Hapus konfigurasi Google OAuth?")) return;
+    try {
+      await api("/api/admin/integrations/google", { method: "DELETE" });
+      form.reset();
+      form.elements.redirectUri.value = `${location.origin}/auth/google/callback`;
+      status.textContent = "Konfigurasi dihapus.";
+      toast("Konfigurasi Google dihapus");
+    } catch (error) {
+      status.textContent = error.message;
     }
   };
 }

@@ -79,15 +79,11 @@ Jangan membagikan `localhost` ke perangkat lain. Untuk runtime mandiri dalam sat
 
 Nota Worker disimpan privat di D1, maksimum **1 MB per gambar**, dan hanya dapat dibaca member household. Gunakan gambar yang dikompres; pantau ukuran database. OCR berjalan di browser dan hasilnya wajib direview sebelum disimpan. Runtime Node menyimpan gambar pada `data/receipts/`.
 
-Gmail tidak aktif sampai Google OAuth dikonfigurasi. Simpan nilai melalui Worker secrets:
+Gmail tidak aktif sampai Google OAuth dikonfigurasi. Login sebagai superadmin lalu buka **Settings -> Integrasi Google** untuk mengisi Client ID, Client Secret, dan redirect URI. Konfigurasi bisa dibaca (tanpa mengembalikan secret), diperbarui, dan dihapus dari dashboard kapan pun; tidak perlu mengedit `.env` atau deploy ulang.
 
-```bash
-npx wrangler secret put GOOGLE_CLIENT_ID
-npx wrangler secret put GOOGLE_CLIENT_SECRET
-npx wrangler secret put GOOGLE_REDIRECT_URI
-```
+Nilai disimpan di `app_settings` pada database server, bukan di aset publik atau repository. Saat konfigurasi berubah, koneksi Gmail lama direset agar setiap member menghubungkan ulang dengan kredensial yang baru. Konfigurasi environment lama tetap dibaca jika belum pernah ada konfigurasi dashboard; menghapus konfigurasi melalui dashboard juga menonaktifkan fallback tersebut.
 
-Tambahkan redirect URI `https://<domain-aplikasi>/auth/google/callback` ke Google Cloud OAuth client. Akses Gmail read-only dan terpisah per user; impor hanya mencatat transaksi setelah review. Kandidat dibatasi 20 pesan per permintaan. Mengimpor referensi email yang sama tidak menggandakan transaksi.
+Tambahkan redirect URI `https://<domain-aplikasi>/auth/google/callback` ke Google Cloud OAuth client bertipe **Web application**. Redirect URI harus memakai origin aplikasi yang sama; HTTP hanya diizinkan pada localhost untuk development. Akses Gmail read-only dan terpisah per user; impor hanya mencatat transaksi setelah review. Kandidat Worker dibatasi 20 pesan per permintaan. Mengimpor referensi email yang sama tidak menggandakan transaksi.
 
 ## Privasi Dan Backup
 
