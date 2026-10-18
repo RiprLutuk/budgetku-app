@@ -73,11 +73,11 @@ function renderAllocation(health) {
 
 function renderRunway(health, rupiah) {
   const months = health.runway.months;
-  const title = months === null ? 'Belum cukup data' : `${months.toFixed(1)} bulan`;
+  const title = months === null ? 'Belum terukur' : `${months.toFixed(1)} bulan`;
   const detail = months === null
-    ? 'Butuh catatan kebutuhan dari bulan yang sudah selesai.'
+    ? 'Menunggu catatan kebutuhan dari bulan penuh.'
     : `Rata-rata ${health.runway.observedMonths} bulan penuh: ${rupiah(health.runway.baseline)} / bulan. Di luar saldo goals.`;
-  return `<div class="runway-card"><div class="runway-icon">${icon('shield')}</div><div><span class="health-label">Ketahanan kas</span><strong class="runway-value tone-${health.runway.tone}">${title}</strong><small>${detail}</small></div></div>`;
+  return `<div class="runway-card"><div class="runway-icon">${icon('shield')}</div><div class="runway-copy"><div class="runway-heading"><span class="health-label">Ketahanan kas</span><strong class="runway-value tone-${health.runway.tone}${months === null ? ' is-empty' : ''}">${title}</strong></div><small>${detail}</small></div></div>`;
 }
 
 export function renderDashboard(container, { snapshot, currentMonth, summary, health, monthName, rupiah, insightItems, onBind }) {

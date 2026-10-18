@@ -1,6 +1,6 @@
 import { bindMoneyInputs, numericAmount } from "./money.js";
 import { closeSelects, icon } from "./ui.js";
-import { localDateValue, withPendingForm } from "./forms.js";
+import { localDateValue, validateForm, withPendingForm } from "./forms.js";
 import { renderGoals as renderGoalsView } from "./views/goals.js";
 import { renderSettings as renderSettingsView } from "./views/settings.js";
 import { createTransactionDialog } from "./components/transaction-dialog.js";
@@ -45,8 +45,9 @@ const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
 function isEditing() {
   const active = document.activeElement;
   return (
-    !["dashboard", "transactions", "goals", "users"].includes(currentView) ||
+    !["dashboard", "transactions", "budget", "goals", "users"].includes(currentView) ||
     Boolean(document.querySelector("dialog[open]")) ||
+    Boolean(app.querySelector('.budget-content[data-editing="true"]')) ||
     Boolean(app.querySelector(".goal-settings[open]")) ||
     Boolean(document.querySelector(".search-select.open")) ||
     ["INPUT", "TEXTAREA", "SELECT"].includes(active?.tagName)
@@ -358,40 +359,168 @@ function renderTransactions() {
   renderTransactionsView(app, { snapshot, currentMonth, rupiah, onBind: bindCommon });
 }
 function renderBudget() {
-  const inc = monthCashflow().income;
-  app.innerHTML = `<div class="content"><div class="card"><div class="section-title"><div><h3>Auto allocation</h3><p>Persentase dihitung proporsional dari income bulan aktif.</p></div><button id="saveBudget" class="primary"><span class="button-icon">${icon("save")}</span><span>Simpan budget</span></button></div>${snapshot.categories
-    .map((c) => {
-      const spent = monthTx()
-          .filter((t) => t.type === "expense" && t.category_id === c.id)
-          .reduce((s, t) => s + t.amount, 0),
-        limit = (inc * c.pct) / 100;
-      return `<div class="budget-row" data-id="${c.id}"><input class="input cat-name" value="${esc(c.name)}"><input class="input cat-pct" type="number" step="0.5" value="${c.pct}"><div><b>${rupiah(limit)}</b><div class="small muted">alokasi</div></div><div><div class="progress"><span style="width:${Math.min(100, pct(spent, limit))}%"></span></div><div class="small muted" style="margin-top:5px">${rupiah(spent)} terpakai</div></div></div>`;
-    })
-    .join(
-      "",
-    )}<div class="insight">Total alokasi budget: <b id="totalPct">${snapshot.categories.reduce((s, c) => s + Number(c.pct), 0)}%</b></div></div></div>`;
-  document
-    .querySelectorAll(".cat-pct")
-    .forEach(
-      (i) =>
-        (i.oninput = () =>
-          (document.querySelector("#totalPct").textContent =
-            `${[...document.querySelectorAll(".cat-pct")].reduce((s, x) => s + Number(x.value || 0), 0)}%`)),
-    );
-  document.querySelector("#saveBudget").onclick = async () => {
-    const categories = [...document.querySelectorAll(".budget-row")].map(
-      (r) => ({
-        id: r.dataset.id,
-        name: r.querySelector(".cat-name").value,
-        pct: Number(r.querySelector(".cat-pct").value || 0),
-      }),
-    );
-    await api("/api/categories", {
-      method: "PUT",
-      body: JSON.stringify({ categories }),
+  const income = monthCashflow().income;
+  const expenses = monthTx().filter((transaction) => transaction.type === "expense");
+  const totalSpent = expenses.reduce((sum, transaction) => sum + Number(transaction.amount), 0);
+  const categoryIds = new Set(snapshot.categories.map((category) => category.id));
+  const uncategorized = expenses
+    .filter((transaction) => !categoryIds.has(transaction.category_id))
+    .reduce((sum, transaction) => sum + Number(transaction.amount), 0);
+  const share = (value) => new Intl.NumberFormat("id-ID", { maximumFractionDigits: 2 }).format(value);
+  const renderItem = (category, spent, editable = true) => `<article class="budget-item" ${editable ? `data-id="${esc(category.id)}"` : ""} data-spent="${spent}">
+    <div class="budget-item-head">
+      <h3 class="budget-category-name">${esc(category.name)}</h3>
+      <span class="budget-category-share">${share(Number(category.pct))}%</span>
+      ${editable ? `<input class="budget-name-input cat-name" value="${esc(category.name)}" aria-label="Nama pos ${esc(category.name)}" maxlength="60" required disabled>
+      <label class="budget-pct-input"><input class="cat-pct" type="number" inputmode="decimal" min="0" max="100" step="any" value="${Number(category.pct)}" aria-label="Persentase ${esc(category.name)}" required disabled><span aria-hidden="true">%</span></label>` : ""}
+    </div>
+    <div class="budget-item-values">
+      <div><small>Alokasi</small><strong data-budget-limit></strong></div>
+      <div><small>Terpakai</small><strong>${rupiah(spent)}</strong></div>
+      <div class="budget-item-balance"><small data-budget-balance-label>Sisa</small><strong data-budget-remaining></strong></div>
+    </div>
+    <div class="budget-progress" role="progressbar" aria-label="Pemakaian ${esc(category.name)}" aria-valuemin="0" aria-valuemax="100"><span></span></div>
+    <div class="budget-item-foot"><span data-budget-progress></span><span data-budget-state></span></div>
+  </article>`;
+
+  app.innerHTML = `<div class="content budget-content" data-editing="false">
+    <form id="budgetForm" class="surface-panel budget-panel" aria-labelledby="budgetTitle" novalidate>
+      <header class="budget-header">
+        <div>
+          <h2 id="budgetTitle">Alokasi pemasukan</h2>
+          <p>Rencana, pemakaian, dan ruang tiap pos.</p>
+        </div>
+        <button id="editBudget" class="icon-btn" type="button" aria-label="Ubah alokasi budget" title="Ubah alokasi budget" ${snapshot.categories.length ? "" : "disabled"}>${icon("edit")}</button>
+        <div class="budget-edit-actions" hidden>
+          <button id="cancelBudget" class="icon-btn" type="button" aria-label="Batalkan perubahan budget" title="Batalkan perubahan">${icon("close")}</button>
+          <button id="saveBudget" class="icon-btn budget-save" type="submit" aria-label="Simpan budget" title="Simpan budget">${icon("check")}</button>
+        </div>
+      </header>
+      <div class="budget-summary" aria-label="Ringkasan budget">
+        <div><span>Pemasukan</span><strong>${rupiah(income)}</strong><small>bulan terpilih</small></div>
+        <div><span>Dialokasikan</span><strong data-budget-allocated></strong><small data-budget-total-pct></small></div>
+        <div><span>Terpakai</span><strong>${rupiah(totalSpent)}</strong><small>${expenses.some((transaction) => transaction.goal_id) ? "termasuk setoran goals" : "belanja bulan ini"}</small></div>
+        <div><span>Sisa budget</span><strong data-budget-total-remaining></strong><small>alokasi dikurangi pemakaian</small></div>
+      </div>
+      <p class="budget-plan-status" data-budget-plan-status role="status"></p>
+      <p class="budget-alert" data-budget-alert hidden></p>
+      <p class="budget-error" id="budgetError" role="alert" hidden></p>
+      <div class="budget-list-heading"><span>Pos anggaran</span><span>${snapshot.categories.length} pos</span></div>
+      <div class="budget-list">
+        ${snapshot.categories.map((category) => renderItem(category, expenses
+          .filter((transaction) => transaction.category_id === category.id)
+          .reduce((sum, transaction) => sum + Number(transaction.amount), 0))).join("")}
+        ${uncategorized ? renderItem({ name: "Tanpa kategori", pct: 0 }, uncategorized, false) : ""}
+        ${snapshot.categories.length || uncategorized ? "" : '<p class="empty">Belum ada pos anggaran.</p>'}
+      </div>
+      <footer class="budget-footer"><span>Porsi dari pemasukan bulan terpilih, bukan saldo bawaan. Pemakaian termasuk setoran goals.</span><span class="budget-edit-note">Preview langsung berubah. Aturan porsi berlaku juga untuk bulan lain.</span></footer>
+    </form>
+  </div>`;
+
+  const root = app.querySelector(".budget-content");
+  const form = root.querySelector("#budgetForm");
+  const errorBox = form.querySelector("#budgetError");
+  const rows = [...form.querySelectorAll(".budget-item")];
+  const readCategories = () => rows.filter((row) => row.dataset.id).map((row) => ({
+    id: row.dataset.id,
+    name: row.querySelector(".cat-name").value.trim(),
+    pct: Number(row.querySelector(".cat-pct").value || 0),
+  }));
+  const updateTotals = () => {
+    const currentTotalPct = readCategories().reduce((sum, category) => sum + category.pct, 0);
+    const currentAllocated = (income * currentTotalPct) / 100;
+    const remaining = currentAllocated - totalSpent;
+    form.querySelector("[data-budget-allocated]").textContent = rupiah(currentAllocated);
+    form.querySelector("[data-budget-total-pct]").textContent = `${share(currentTotalPct)}% pemasukan`;
+    const remainingValue = form.querySelector("[data-budget-total-remaining]");
+    remainingValue.textContent = rupiah(remaining);
+    remainingValue.dataset.tone = remaining < 0 ? "bad" : "neutral";
+    const status = form.querySelector("[data-budget-plan-status]");
+    const excess = currentTotalPct > 100 + 1e-8;
+    status.dataset.tone = excess ? "bad" : "neutral";
+    status.textContent = excess
+      ? `Alokasi melebihi 100% sebesar ${share(currentTotalPct - 100)}%. Kurangi porsi sebelum menyimpan.`
+      : !income
+        ? "Belum ada pemasukan di bulan ini. Nominal alokasi akan mengikuti pemasukan yang dicatat."
+        : currentTotalPct < 100 - 1e-8
+          ? `${share(100 - currentTotalPct)}% belum dibagi (${rupiah(income - currentAllocated)}).`
+          : "100% pemasukan sudah dialokasikan.";
+    let overBudget = 0;
+    let withoutBudget = 0;
+    rows.forEach((row) => {
+      const rowPct = Number(row.querySelector(".cat-pct")?.value || 0);
+      const spent = Number(row.dataset.spent || 0);
+      const limit = (income * rowPct) / 100;
+      const balance = limit - spent;
+      const usage = limit > 0 ? Math.round((spent / limit) * 100) : 0;
+      const progress = limit > 0 ? Math.min(100, usage) : spent > 0 ? 100 : 0;
+      const unbudgeted = spent > 0 && limit <= 0;
+      const over = limit > 0 && balance < 0;
+      const tone = over ? "bad" : unbudgeted || usage >= 80 ? "warn" : "neutral";
+      if (over) overBudget++;
+      if (unbudgeted) withoutBudget++;
+      row.dataset.tone = tone;
+      row.querySelector("[data-budget-limit]").textContent = rupiah(limit);
+      row.querySelector("[data-budget-remaining]").textContent = rupiah(Math.abs(balance));
+      row.querySelector("[data-budget-balance-label]").textContent = balance < 0 ? "Lebih" : "Sisa";
+      row.querySelector(".budget-progress span").style.width = `${progress}%`;
+      row.querySelector(".budget-progress").setAttribute("aria-valuenow", String(progress));
+      row.querySelector(".budget-progress").setAttribute("aria-valuetext", `${rupiah(spent)} terpakai dari ${rupiah(limit)}`);
+      row.querySelector("[data-budget-progress]").textContent = unbudgeted ? "Tanpa alokasi" : `${usage}% terpakai`;
+      row.querySelector("[data-budget-state]").textContent = over ? "Melebihi alokasi" : unbudgeted ? "Perlu alokasi" : usage >= 80 ? "Mendekati batas" : limit ? "Dalam alokasi" : "Belum dialokasikan";
     });
-    toast("Budget tersimpan");
+    const alerts = [overBudget ? `${overBudget} pos melebihi alokasi` : "", withoutBudget ? `${withoutBudget} pos terpakai tanpa alokasi` : ""].filter(Boolean);
+    const alert = form.querySelector("[data-budget-alert]");
+    alert.hidden = !alerts.length;
+    alert.textContent = alerts.join(" · ");
   };
+  form.querySelector("#editBudget").onclick = () => {
+    root.dataset.editing = "true";
+    form.querySelector("#editBudget").hidden = true;
+    form.querySelector(".budget-edit-actions").hidden = false;
+    form.querySelectorAll("input").forEach((input) => { input.disabled = false; });
+    form.querySelector(".cat-pct")?.focus({ preventScroll: true });
+  };
+  form.querySelector("#cancelBudget").onclick = () => renderBudget();
+  form.addEventListener("input", (event) => {
+    errorBox.hidden = true;
+    event.target.setCustomValidity("");
+    updateTotals();
+  });
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (root.dataset.editing !== "true" || form.getAttribute("aria-busy") === "true") return;
+    form.querySelectorAll(".cat-name").forEach((input) => {
+      input.setCustomValidity(input.value.trim() ? "" : "Nama pos wajib diisi.");
+    });
+    if (!validateForm(form)) return;
+    const categories = readCategories();
+    if (categories.reduce((sum, category) => sum + category.pct, 0) > 100 + 1e-8) {
+      errorBox.textContent = "Total alokasi tidak boleh lebih dari 100%. Kurangi persentase pos terlebih dahulu.";
+      errorBox.hidden = false;
+      return;
+    }
+    try {
+      await withPendingForm(form, () => api("/api/categories", {
+        method: "PUT",
+        body: JSON.stringify({ categories }),
+      }));
+      const replacements = new Map(categories.map((category) => [category.id, category]));
+      snapshot.categories = snapshot.categories.map((category) => ({ ...category, ...replacements.get(category.id) }));
+      if (form.isConnected) renderBudget();
+      toast("Budget tersimpan");
+    } catch (error) {
+      errorBox.textContent = error.message;
+      errorBox.hidden = false;
+      return;
+    }
+    try {
+      await refreshSnapshot();
+    } catch {
+      toast("Budget tersimpan. Sinkronisasi akan dicoba lagi otomatis.");
+    }
+  });
+  updateTotals();
 }
 function renderGoals() {
   renderGoalsView(app, {
