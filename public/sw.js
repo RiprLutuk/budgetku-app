@@ -1,4 +1,4 @@
-const CACHE = 'budgetku-family-v14-ibmplex';
+const CACHE = 'budgetku-family-v15-mobile-topbar';
 const ASSETS = [
   '/',
   '/index.html',
