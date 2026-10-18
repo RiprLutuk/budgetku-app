@@ -82,8 +82,8 @@ function renderAllocation(health) {
 function renderRunway(health, rupiah) {
   const months = health.runway.emergencyMonths;
   const title = months === null ? 'Belum terukur' : `${months.toFixed(1)} bulan`;
-  const detail = months === null ? 'Atur kebutuhan esensial di Settings.' : `Basis ${rupiah(health.runway.baseline)} / bulan`;
-  return `<div class="runway-card"><div class="runway-icon">${icon('shield')}</div><div class="runway-copy"><div class="runway-heading"><span class="health-label">Dana darurat</span><strong class="runway-value tone-${health.runway.tone}${months === null ? ' is-empty' : ''}">${title}</strong></div><small>${detail}</small>${months === null ? `<button type="button" class="text-action runway-action" data-go="settings">Atur kebutuhan ${icon('arrow')}</button>` : ''}</div></div>`;
+  const detail = months === null ? 'Atur kebutuhan esensial' : `Basis ${rupiah(health.runway.baseline)} / bulan`;
+  return `<button type="button" class="runway-card runway-compact" ${months === null ? 'data-go="settings"' : ''} ${months === null ? '' : 'disabled'}><span class="runway-icon">${icon('shield')}</span><span class="runway-copy"><span class="health-label">Dana darurat</span><strong class="runway-value tone-${health.runway.tone}${months === null ? ' is-empty' : ''}">${title}</strong></span><span class="runway-detail">${detail}${months === null ? icon('arrow') : ''}</span></button>`;
 }
 
 export function renderDashboard(container, { snapshot, currentMonth, summary, health, monthName, rupiah, insightItems, privacyButton, onBind }) {
