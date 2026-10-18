@@ -58,6 +58,10 @@ try {
     db.exec(fs.readFileSync(path.join(__dirname, 'migrations/0004_realistic_auto_budget.sql'), 'utf8'));
     db.prepare("INSERT INTO app_settings(key,value) VALUES('auto_budget_revision_0004',?)").run(new Date().toISOString());
   }
+  if (!db.prepare("SELECT value FROM app_settings WHERE key='discretionary_classification_0006'").get()) {
+    db.exec(fs.readFileSync(path.join(__dirname, 'migrations/0006_classify_discretionary_spending.sql'), 'utf8'));
+    db.prepare("INSERT INTO app_settings(key,value) VALUES('discretionary_classification_0006',?)").run(new Date().toISOString());
+  }
   const superCount = db.prepare("SELECT COUNT(*) AS count FROM users WHERE is_superadmin=1 AND status='active'").get().count;
   if (!superCount) {
     const firstUser = db.prepare('SELECT id FROM users ORDER BY created_at ASC LIMIT 1').get();

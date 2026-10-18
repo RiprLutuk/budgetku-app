@@ -1,4 +1,4 @@
-const CACHE = 'budgetku-family-v35-financial-ledger-assets';
+const CACHE = 'budgetku-family-v36-spending-classification-assets';
 const ASSETS = [
   '/',
   '/index.html',

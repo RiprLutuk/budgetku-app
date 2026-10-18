@@ -27,6 +27,10 @@ export function createTransactionDialog({ dialog, getSnapshot, save, onDelete, o
     const matches = data.categories.filter((item) => item.name.trim().toLowerCase() === `target ${selected.name.trim().toLowerCase()}` || (selected.purpose === 'emergency' && item.name.trim().toLowerCase() === selected.name.trim().toLowerCase()));
     return matches.length === 1 ? matches[0] : null;
   }
+  function isDiscretionaryCategory(categoryId) {
+    const name = data?.categories.find((item) => item.id === categoryId)?.name || '';
+    return /^(lifestyle|kopi\s*&\s*jajan kerja|hiburan|makan di luar)$/i.test(name.trim());
+  }
   function syncHint() {
     const selected = data?.goals.find((item) => item.id === goal.value);
     const withdrawal = fields.type.value === 'income';
@@ -58,6 +62,10 @@ export function createTransactionDialog({ dialog, getSnapshot, save, onDelete, o
     const selected = data?.categories.find((item) => item.id === category.value);
     const matches = (data?.goals || []).filter((item) => selected?.name.trim().toLowerCase() === `target ${item.name.trim().toLowerCase()}` || (item.purpose === 'emergency' && selected?.name.trim().toLowerCase() === item.name.trim().toLowerCase()));
     goal.value = fields.type.value === 'expense' && matches.length === 1 ? matches[0].id : '';
+    // New discretionary expenses should not silently inflate the essential
+    // needs figure. The person can still change this checkbox when a purchase
+    // is genuinely essential.
+    if (!editingId && fields.type.value === 'expense' && !goal.value) fields.need.checked = !isDiscretionaryCategory(category.value);
     syncHint();
   }
   function syncType() {
