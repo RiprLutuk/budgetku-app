@@ -59,8 +59,11 @@ export function closeSelects() { openedSelect?.close(); }
 document.addEventListener('pointerdown', (event) => {
   if (openedSelect && !openedSelect.host.contains(event.target)) closeSelects();
 });
-window.addEventListener('resize', () => openedSelect?.position());
-document.addEventListener('scroll', () => openedSelect?.position(), true);
+const repositionOpenedSelect = () => openedSelect?.position();
+window.addEventListener('resize', repositionOpenedSelect);
+document.addEventListener('scroll', repositionOpenedSelect, true);
+window.visualViewport?.addEventListener('resize', repositionOpenedSelect);
+window.visualViewport?.addEventListener('scroll', repositionOpenedSelect);
 
 export function searchableSelect(host, { name, label, options, value = '', inputId, describedBy, onChange = () => {} }) {
   host.selectControl?.destroy();
@@ -154,16 +157,25 @@ export function searchableSelect(host, { name, label, options, value = '', input
     position() {
       if (!host.isConnected) return control.close();
       const box = input.getBoundingClientRect();
-      const viewportHeight = window.visualViewport?.height || window.innerHeight;
-      const availableBelow = viewportHeight - box.bottom - 12;
-      const above = availableBelow < 150 && box.top > availableBelow;
+      const viewport = window.visualViewport;
+      const viewportTop = viewport?.offsetTop || 0;
+      const viewportLeft = viewport?.offsetLeft || 0;
+      const viewportHeight = viewport?.height || window.innerHeight;
+      const viewportWidth = viewport?.width || window.innerWidth;
+      const boxTop = box.top - viewportTop;
+      const boxBottom = box.bottom - viewportTop;
+      const availableBelow = viewportHeight - boxBottom - 12;
+      const availableAbove = boxTop - 12;
+      const above = availableBelow < 150 && availableAbove > availableBelow;
       const height = Math.min(230, Math.max(80, above ? box.top - 12 : availableBelow));
+      const left = Math.max(viewportLeft + 8, Math.min(box.left, viewportLeft + viewportWidth - box.width - 8));
       Object.assign(list.style, {
         position: 'fixed', margin: '0', inset: 'auto',
-        left: `${Math.max(8, Math.min(box.left, window.innerWidth - box.width - 8))}px`,
+        left: `${left}px`,
         width: `${box.width}px`, maxHeight: `${height}px`,
-        top: above ? 'auto' : `${box.bottom + 5}px`,
-        bottom: above ? `${window.innerHeight - box.top + 5}px` : 'auto',
+        top: above ? 'auto' : `${viewportTop + boxBottom + 5}px`,
+        bottom: above ? `${window.innerHeight - (viewportTop + boxTop) + 5}px` : 'auto',
+        zIndex: '1200',
       });
     },
     setDisabled(disabled) { input.disabled = disabled; hidden.disabled = disabled; toggle.disabled = disabled; if (disabled) control.close(); },

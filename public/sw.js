@@ -1,4 +1,4 @@
-const CACHE = 'budgetku-family-v27-financial-integrity';
+const CACHE = 'budgetku-family-v28-mobile-cockpit';
 const ASSETS = [
   '/',
   '/index.html',
