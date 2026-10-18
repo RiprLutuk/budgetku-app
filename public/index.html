@@ -38,11 +38,14 @@
         <button id="toggleSidebar" class="icon-btn" aria-label="Buka navigasi" aria-controls="sidebar" aria-expanded="false">☰</button>
         <div class="topbar-title-group">
           <h1 id="pageTitle">Dashboard</h1>
-          <div class="month-navigator" role="group" aria-label="Navigasi bulan">
-            <button id="prevMonthBtn" class="month-nav-btn" type="button" aria-label="Bulan sebelumnya" title="Bulan sebelumnya"></button>
-            <span id="monthLabel" aria-live="polite" aria-atomic="true"></span>
-            <button id="nextMonthBtn" class="month-nav-btn" type="button" aria-label="Bulan berikutnya" title="Bulan berikutnya"></button>
-            <button id="currentMonthBtn" class="month-nav-reset" type="button" aria-label="Kembali ke bulan ini" title="Kembali ke bulan ini" hidden></button>
+          <div id="monthControl" class="month-control">
+            <button id="monthPickerBtn" class="month-picker-btn" type="button" aria-label="Pilih bulan" aria-controls="monthNavigator" aria-expanded="false"><span id="compactMonthLabel"></span><span class="month-picker-chevron" aria-hidden="true"></span></button>
+            <div id="monthNavigator" class="month-navigator" role="group" aria-label="Navigasi bulan">
+              <button id="prevMonthBtn" class="month-nav-btn" type="button" aria-label="Bulan sebelumnya" title="Bulan sebelumnya"></button>
+              <span id="monthLabel" aria-live="polite" aria-atomic="true"></span>
+              <button id="nextMonthBtn" class="month-nav-btn" type="button" aria-label="Bulan berikutnya" title="Bulan berikutnya"></button>
+              <button id="currentMonthBtn" class="month-nav-reset" type="button" aria-label="Kembali ke bulan ini" title="Kembali ke bulan ini" hidden></button>
+            </div>
           </div>
         </div>
         <button id="quickAdd" class="primary icon-label"><span class="button-icon">＋</span><span class="hide-compact">Transaksi</span></button>

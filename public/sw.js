@@ -1,4 +1,4 @@
-const CACHE = 'budgetku-family-v15-mobile-topbar';
+const CACHE = 'budgetku-family-v16-compact-toolbar';
 const ASSETS = [
   '/',
   '/index.html',

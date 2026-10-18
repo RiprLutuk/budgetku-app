@@ -23,6 +23,8 @@ const app = document.querySelector("#app"),
   authScreen = document.querySelector("#authScreen"),
   shell = document.querySelector("#shell"),
   pageTitle = document.querySelector("#pageTitle");
+const monthControl = document.querySelector("#monthControl"),
+  monthPicker = document.querySelector("#monthPickerBtn");
 const rupiah = (n) =>
   new Intl.NumberFormat("id-ID", {
     style: "currency",
@@ -191,6 +193,10 @@ function renderChrome() {
     "id-ID",
     { month: "long", year: "numeric" },
   ).format(new Date(`${currentMonth}-01T00:00:00`));
+  document.querySelector("#compactMonthLabel").textContent = new Intl.DateTimeFormat(
+    "id-ID", { month: "short", year: "numeric" },
+  ).format(new Date(`${currentMonth}-01T00:00:00`));
+  monthPicker.setAttribute("aria-label", `Pilih bulan, ${document.querySelector("#monthLabel").textContent}`);
   document.querySelector("#currentMonthBtn").hidden = currentMonth === localDateValue().slice(0, 7);
   document.querySelectorAll(".admin-only").forEach((el) => {
     el.classList.toggle("hidden", !me.user.is_superadmin);
@@ -630,6 +636,7 @@ document.querySelectorAll(".nav").forEach(
     }),
 );
 function setSidebarOpen(open) {
+  if (open) setMonthPickerOpen(false);
   document.querySelector("#sidebar").classList.toggle("open", open);
   document.body.classList.toggle("nav-open", open);
   document.querySelector("#toggleSidebar").setAttribute("aria-expanded", String(open));
@@ -637,16 +644,43 @@ function setSidebarOpen(open) {
 document.querySelector("#toggleSidebar").onclick = () =>
   setSidebarOpen(!document.querySelector("#sidebar").classList.contains("open"));
 document.querySelector("#sidebarBackdrop").onclick = () => setSidebarOpen(false);
+function setMonthPickerOpen(open) {
+  monthControl.classList.toggle("open", open);
+  monthPicker.setAttribute("aria-expanded", String(open));
+}
+monthPicker.onclick = () => setMonthPickerOpen(monthPicker.getAttribute("aria-expanded") !== "true");
+document.querySelector(".month-picker-chevron").innerHTML = icon("chevron");
+document.addEventListener("pointerdown", (event) => {
+  if (!monthControl.contains(event.target)) setMonthPickerOpen(false);
+});
+monthControl.addEventListener("focusout", (event) => {
+  if (!monthControl.contains(event.relatedTarget)) setMonthPickerOpen(false);
+});
+window.matchMedia("(max-width: 760px)").addEventListener("change", () => setMonthPickerOpen(false));
 document.querySelector("#prevMonthBtn").innerHTML = icon("chevronLeft");
 document.querySelector("#nextMonthBtn").innerHTML = icon("chevronRight");
-document.querySelector("#currentMonthBtn").innerHTML = icon("today");
+document.querySelector("#currentMonthBtn").innerHTML = `${icon("today")}<span class="month-reset-label">Bulan ini</span>`;
 document.querySelector("#prevMonthBtn").onclick = () => shiftMonth(-1);
 document.querySelector("#nextMonthBtn").onclick = () => shiftMonth(1);
-document.querySelector("#currentMonthBtn").onclick = resetMonth;
+document.querySelector("#currentMonthBtn").onclick = () => {
+  const wasOpen = monthPicker.getAttribute("aria-expanded") === "true";
+  resetMonth();
+  setMonthPickerOpen(false);
+  if (wasOpen) monthPicker.focus();
+};
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") setSidebarOpen(false);
+  if (event.key === "Escape") {
+    setSidebarOpen(false);
+    if (monthPicker.getAttribute("aria-expanded") === "true") {
+      setMonthPickerOpen(false);
+      monthPicker.focus();
+    }
+  }
 });
-document.querySelector("#quickAdd").onclick = () => openTx();
+document.querySelector("#quickAdd").onclick = () => {
+  setMonthPickerOpen(false);
+  openTx();
+};
 document.querySelectorAll("dialog").forEach((dialog) => {
   dialog.addEventListener("close", closeSelects);
 });

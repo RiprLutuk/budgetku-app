@@ -249,6 +249,9 @@ main {
   min-width: 0;
   flex: 1;
 }
+.month-control { position: relative; }
+.month-picker-btn,
+.month-reset-label { display: none; }
 .month-navigator {
   display: flex;
   align-items: center;
@@ -1727,58 +1730,107 @@ body {
 @media (max-width: 760px) {
   .app-shell { grid-template-columns: 1fr; }
   .topbar {
-    height: 64px;
-    padding: 8px 12px;
-    gap: 10px;
+    height: calc(56px + env(safe-area-inset-top, 0px));
+    flex-shrink: 0;
+    padding: env(safe-area-inset-top, 0px) max(8px, env(safe-area-inset-right, 0px)) 0 max(8px, env(safe-area-inset-left, 0px));
+    gap: 4px;
   }
   #toggleSidebar {
-    width: 40px;
-    height: 40px;
-    min-width: 40px;
-    border-radius: 14px;
-    background: #fffefa;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--dark);
   }
   #toggleSidebar .icon { width: 20px; height: 20px; }
   .topbar-title-group {
     display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    justify-content: center;
-    gap: 1px;
-    margin-left: 0;
-    line-height: 1;
+    align-items: center;
+    gap: 6px;
   }
   .topbar h1 {
-    font-size: 19px;
-    line-height: 1.1;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.25;
+    letter-spacing: -0.025em;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
-  .month-navigator {
-    gap: 1px;
-    min-height: 22px;
-    line-height: 1;
+  .month-control { flex-shrink: 0; }
+  .month-picker-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    min-height: 44px;
+    padding: 0 6px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .month-picker-chevron .icon { width: 12px; height: 12px; }
+  .month-picker-btn:hover,
+  .month-picker-btn[aria-expanded="true"] {
+    background: var(--primary-soft);
+    color: var(--primary);
+  }
+  .month-navigator { display: none; }
+  .month-control.open .month-navigator {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr) 44px;
+    align-items: center;
+    gap: 4px;
+    width: 248px;
+    padding: 8px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--card);
+    box-shadow: var(--shadow-lg);
   }
   .month-navigator > #monthLabel {
-    min-width: 100px;
-    font-size: 9px;
-    line-height: 1;
+    min-width: 0;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 500;
   }
   .month-nav-btn,
   .month-nav-reset {
-    min-width: 25px;
-    min-height: 25px;
-    padding-inline: 5px;
+    min-width: 44px;
+    min-height: 44px;
   }
+  .month-nav-reset {
+    grid-column: 1 / -1;
+    gap: 6px;
+    margin-left: 0;
+    font-size: 12px;
+  }
+  .month-reset-label { display: inline; }
+  #toggleSidebar:hover { background: var(--card-hover); }
   #quickAdd.quick-add {
-    width: 40px;
-    height: 40px;
-    min-width: 40px;
-    min-height: 40px;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
     padding: 0;
-    border-radius: 14px;
+    border-radius: 12px;
+    box-shadow: none;
   }
   #quickAdd.quick-add .icon {
-    width: 21px;
-    height: 21px;
+    width: 20px;
+    height: 20px;
   }
   .content { padding: 14px 12px 30px; }
   .balance-hero {
