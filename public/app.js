@@ -5,10 +5,12 @@ import { renderGoals as renderGoalsView } from "./views/goals.js";
 import { renderSettings as renderSettingsView } from "./views/settings.js";
 import { createTransactionDialog } from "./components/transaction-dialog.js";
 import { financialHealth, summarizeCashflow } from "./cashflow.js";
+import { goalPlan } from "./goal-math.js";
 import { renderDashboard as renderDashboardView, renderTransactions as renderTransactionsView } from "./views/dashboard.js";
 import { createNavigation } from "./navigation.js";
 import { createPullRefresh } from "./pull-refresh.js";
 import { downloadTransactions } from "./exports.js";
+import { createPrivacyMode } from "./privacy.js";
 
 let me = null,
   txDialog = null,
@@ -28,12 +30,17 @@ const app = document.querySelector("#app"),
   shell = document.querySelector("#shell"),
   pageTitle = document.querySelector("#pageTitle");
 const monthControl = document.querySelector("#monthControl"),
-  monthPicker = document.querySelector("#monthPickerBtn"),
+  monthPicker = document.querySelector("#monthPicker"),
   moreDialog = document.querySelector("#moreDialog"),
   moreButton = document.querySelector(".nav-more");
 const navigation = createNavigation({ getUser: () => me?.user, getCurrentMonth: () => localDateValue().slice(0, 7) });
 const dirtyForms = new WeakSet();
 const refreshButton = document.querySelector("#refreshData");
+const privacyButton = document.querySelector("#togglePrivacy");
+createPrivacyMode({
+  button: privacyButton,
+  onChange: (hidden) => { privacyButton.innerHTML = icon(hidden ? "eyeOff" : "eye"); },
+});
 const rupiah = (n) =>
   new Intl.NumberFormat("id-ID", {
     style: "currency",
@@ -111,16 +118,9 @@ function showAuth() {
 function renderAuth() {
   authScreen.innerHTML = `
     <section class="auth-card" aria-labelledby="loginTitle">
-      <div class="auth-brand">
-        <img src="/favicon.svg" alt="" class="auth-logo" width="32" height="32">
-        <div class="auth-brand-copy">
-          <span class="auth-brand-name">BudgetKu</span>
-          <span class="auth-brand-caption">Family money tracker</span>
-        </div>
-      </div>
       <header class="auth-heading">
-        <h1 id="loginTitle">Masuk ke akunmu</h1>
-        <p>Lanjutkan ke dashboard keuangan keluarga.</p>
+        <h1 id="loginTitle">Masuk</h1>
+        <p>Kelola keuangan keluarga bersama.</p>
       </header>
       <form id="loginForm" class="auth-form" aria-labelledby="loginTitle">
         <label for="loginEmail">Email
@@ -219,33 +219,13 @@ function showApp() {
   renderChrome();
   render();
 }
-function shiftMonth(offset) {
-  const [year, month] = currentMonth.split("-").map(Number);
-  const next = new Date(year, month - 1 + offset, 1);
-  applyNavigation(navigation.save({ view: currentView, month: `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}` }));
-  renderChrome();
-  render();
-  refreshSnapshot().catch((error) => toast(error.message));
-}
-function resetMonth() {
-  applyNavigation(navigation.save({ view: currentView }));
-  renderChrome();
-  render();
-  refreshSnapshot().catch((error) => toast(error.message));
-}
 function renderChrome() {
   if (!me || !snapshot) return;
   const household = me.households.find((h) => h.id === snapshot.household.id);
   if (household) household.name = snapshot.household.name;
-  document.querySelector("#monthLabel").textContent = new Intl.DateTimeFormat(
-    "id-ID",
-    { month: "long", year: "numeric" },
-  ).format(new Date(`${currentMonth}-01T00:00:00`));
-  document.querySelector("#compactMonthLabel").textContent = new Intl.DateTimeFormat(
-    "id-ID", { month: "short", year: "numeric" },
-  ).format(new Date(`${currentMonth}-01T00:00:00`));
-  monthPicker.setAttribute("aria-label", `Pilih bulan, ${document.querySelector("#monthLabel").textContent}`);
-  document.querySelector("#currentMonthBtn").hidden = currentMonth === localDateValue().slice(0, 7);
+  const monthName = new Intl.DateTimeFormat("id-ID", { month: "long", year: "numeric" }).format(new Date(`${currentMonth}-01T00:00:00`));
+  monthPicker.value = currentMonth;
+  monthPicker.setAttribute("aria-label", `Pilih bulan, ${monthName}`);
   document.querySelectorAll(".admin-only").forEach((el) => {
     el.classList.toggle("hidden", !me.user.is_superadmin);
   });
@@ -266,9 +246,10 @@ function renderChrome() {
   });
 }
 const monthTx = () => snapshot.transactions.filter((transaction) => transaction.tx_date.slice(0, 7) === currentMonth);
-const monthCashflow = () => summarizeCashflow(snapshot.monthlySummary, currentMonth, snapshot.transactions, snapshot.goals);
+const monthCashflow = () => summarizeCashflow(snapshot.monthlySummary, currentMonth, snapshot.transactions, snapshot.goals, snapshot.household);
 const monthHealth = (summary = monthCashflow()) => financialHealth(summary, snapshot.monthlySummary, currentMonth, snapshot.goals, snapshot.household);
 function render() {
+  app.dataset.view = currentView;
   document
     .querySelectorAll(".nav")
     .forEach((button) => {
@@ -279,15 +260,17 @@ function render() {
     });
   moreButton.classList.toggle("active", ["receipts", "family", "users", "settings"].includes(currentView));
   monthControl.hidden = !["dashboard", "transactions", "budget"].includes(currentView);
+  privacyButton.hidden = currentView !== "dashboard";
+  document.querySelector("#quickAdd").hidden = currentView !== "dashboard";
   pageTitle.textContent = {
     dashboard: "Dashboard",
     transactions: "Transaksi",
     budget: "Auto Budget",
-    goals: "Goals",
+    goals: "Tabungan",
     receipts: "Nota & Gmail",
-    family: "Family",
+    family: "Keluarga",
     users: "Kelola User",
-    settings: "Settings",
+    settings: "Pengaturan",
   }[currentView];
   document.title = `${pageTitle.textContent} - BudgetKu`;
   if (currentView === "dashboard") return renderDashboard();
@@ -315,12 +298,12 @@ function insightItems(summary = monthCashflow()) {
   if (exp > snapshot.household.monthly_limit)
     out.push({
       kind: "bad",
-      text: `Pengeluaran ${rupiah(exp)} sudah di atas guardrail ${rupiah(snapshot.household.monthly_limit)}. Tahan belanja discretionary sampai arus kas kembali aman.`,
+      text: `Belanja konsumtif ${rupiah(exp)} sudah di atas guardrail ${rupiah(snapshot.household.monthly_limit)}. Tahan belanja discretionary sampai arus kas kembali aman.`,
     });
   else if (exp > snapshot.household.monthly_limit * 0.8)
     out.push({
       kind: "warn",
-      text: `Pengeluaran sudah ${pct(exp, snapshot.household.monthly_limit)}% dari guardrail bulanan. Sisa ruang ${rupiah(Math.max(0, snapshot.household.monthly_limit - exp))}.`,
+      text: `Belanja konsumtif sudah ${pct(exp, snapshot.household.monthly_limit)}% dari guardrail bulanan. Sisa ruang ${rupiah(Math.max(0, snapshot.household.monthly_limit - exp))}.`,
     });
   if (inc > 0 && saveAmt / inc < 0.2)
     out.push({
@@ -367,13 +350,19 @@ function insightItems(summary = monthCashflow()) {
 function renderDashboard() {
   const monthName = new Intl.DateTimeFormat("id-ID", { month: "long", year: "numeric" }).format(new Date(`${currentMonth}-01T00:00:00`));
   const summary = monthCashflow();
-  renderDashboardView(app, { snapshot, currentMonth, summary, health: monthHealth(summary), monthName, rupiah, insightItems: insightItems(summary), onBind: bindCommon });
+  renderDashboardView(app, { snapshot, currentMonth, summary, health: monthHealth(summary), monthName, rupiah, insightItems: insightItems(summary), privacyButton, onBind: bindCommon });
 }
 function renderTransactions() {
   renderTransactionsView(app, { snapshot, currentMonth, rupiah, onBind: bindCommon, onExportCsv: downloadTransactions });
 }
 function renderBudget() {
-  const income = monthCashflow().income;
+  const actualIncome = monthCashflow().income;
+  // A monthly plan is a forward-looking budget aid.  It must never be
+  // substituted into a closed month, otherwise a month with no recorded
+  // income can look funded even though it was not.
+  const canUsePlannedIncome = currentMonth >= localDateValue().slice(0, 7);
+  const income = actualIncome || (canUsePlannedIncome ? Number(snapshot.household.planned_income || 0) : 0);
+  const incomeBasis = actualIncome ? "pemasukan tercatat" : income ? "rencana pemasukan" : "belum ada pemasukan";
   const expenses = monthTx().filter((transaction) => transaction.type === "expense");
   const totalSpent = expenses.reduce((sum, transaction) => sum + Number(transaction.amount), 0);
   const categoryIds = new Set(snapshot.categories.map((category) => category.id));
@@ -411,7 +400,7 @@ function renderBudget() {
         </div>
       </header>
       <div class="budget-summary" aria-label="Ringkasan budget">
-        <div><span>Pemasukan</span><strong>${rupiah(income)}</strong><small>bulan terpilih</small></div>
+        <div><span>Pemasukan</span><strong>${rupiah(income)}</strong><small>${incomeBasis}</small></div>
         <div><span>Dialokasikan</span><strong data-budget-allocated></strong><small data-budget-total-pct></small></div>
         <div><span>Terpakai</span><strong>${rupiah(totalSpent)}</strong><small>${expenses.some((transaction) => transaction.goal_id) ? "termasuk setoran goals" : "belanja bulan ini"}</small></div>
         <div><span>Sisa budget</span><strong data-budget-total-remaining></strong><small>alokasi dikurangi pemakaian</small></div>
@@ -427,7 +416,7 @@ function renderBudget() {
         ${uncategorized ? renderItem({ name: "Tanpa kategori", pct: 0 }, uncategorized, false) : ""}
         ${snapshot.categories.length || uncategorized ? "" : '<p class="empty">Belum ada pos anggaran.</p>'}
       </div>
-      <footer class="budget-footer"><span>Porsi dari pemasukan bulan terpilih, bukan saldo bawaan. Pemakaian termasuk setoran goals.</span><span class="budget-edit-note">Preview langsung berubah. Aturan porsi berlaku juga untuk bulan lain.</span></footer>
+      <footer class="budget-footer"><span>Porsi dari ${incomeBasis}; bukan saldo bawaan. Setoran tabungan terpisah dari belanja konsumtif.</span><span class="budget-edit-note">Preview langsung berubah. Aturan porsi berlaku juga untuk bulan lain.</span></footer>
     </form>
   </div>`;
 
@@ -547,7 +536,17 @@ function renderGoals() {
     refresh: () => refreshSnapshot(),
     onSaveGoal: (goalId) => {
       const goal = snapshot.goals.find((item) => item.id === goalId);
-      openTx({ type: "expense", note: `Tabungan ${goal.name}`, goalId: goal.id });
+      const latestDeposit = snapshot.transactions
+        .filter((item) => item.goal_id === goal.id && item.type === "expense")
+        .sort((left, right) => String(right.tx_date).localeCompare(String(left.tx_date)))[0];
+      const planned = goalPlan(goal, localDateValue()).perMonth;
+      const amount = planned || Number(latestDeposit?.amount || 0);
+      const amountHint = planned
+        ? `Nominal diisi dari kebutuhan setoran ${rupiah(amount)} per bulan.`
+        : amount
+          ? `Nominal mengikuti setoran terakhir: ${rupiah(amount)}.`
+          : "Masukkan nominal setoran sesuai kemampuan Anda.";
+      openTx({ type: "expense", note: `Tabungan ${goal.name}`, goalId: goal.id, amount, amountHint });
     },
     onWithdrawGoal: (goalId) => {
       const goal = snapshot.goals.find((item) => item.id === goalId);
@@ -556,7 +555,7 @@ function renderGoals() {
   });
 }
 function renderReceipts() {
-  app.innerHTML = `<div class="content"><div class="grid two"><div class="card"><div class="section-title"><div><h3>Scan nota</h3><p>OCR di browser, foto disimpan ke server setelah kamu review.</p></div></div><div class="receipt-drop"><input id="receiptFile" type="file" accept="image/*" capture="environment"><div id="ocrStatus" class="small muted" style="margin-top:10px">Foto / upload struk. Hasil OCR perlu direview.</div></div></div><div class="card"><div class="section-title"><div><h3>Gmail import</h3><p>Setiap member connect Gmail masing-masing, read-only.</p></div></div><div id="gmailBox">Mengecek...</div></div></div><div class="card" style="margin-top:16px"><h3>Kandidat Gmail</h3><div id="gmailCandidates" class="empty">Belum dimuat.</div></div></div>`;
+  app.innerHTML = `<div class="content utilities-content receipts-content"><section class="card utility-card receipt-card"><div class="section-title"><div><h3>Scan nota</h3><p>Ambil foto atau unggah struk. Kamu tetap meninjau hasilnya sebelum transaksi dibuat.</p></div></div><div class="receipt-drop"><input id="receiptFile" class="receipt-input" type="file" accept="image/*" capture="environment"><label for="receiptFile" class="receipt-upload">${icon("receipt")}<span>Pilih foto nota</span></label><div id="ocrStatus" class="small muted">Foto struk akan dibaca di perangkat ini.</div></div></section><section class="card utility-card gmail-card"><div class="section-title"><div><h3>Impor Gmail</h3><p>Hubungkan Gmail pribadi untuk mencari bukti transaksi. Akses hanya-baca.</p></div></div><div id="gmailBox" class="utility-action">Mengecek...</div></section><section class="card utility-card candidates-card"><div class="section-title"><div><h3>Kandidat Gmail</h3><p>Transaksi yang ditemukan akan muncul di sini untuk ditinjau.</p></div></div><div id="gmailCandidates" class="empty">Belum ada kandidat untuk ditinjau.</div></section></div>`;
   document.querySelector("#receiptFile").onchange = handleReceipt;
   return loadGmailStatus();
 }
@@ -661,12 +660,12 @@ async function scanGmail() {
   }
 }
 function renderFamily() {
-  app.innerHTML = `<div class="content"><div class="grid two"><div class="card"><div class="section-title"><div><h3>Member household</h3><p>${esc(snapshot.household.name)}</p></div></div>${snapshot.members.map((m) => `<div class="member-row"><div><b>${esc(m.name)}</b><div class="small muted">${esc(m.email)}</div></div><span class="pill">${esc(m.role)}</span></div>`).join("")}</div><div class="card"><div class="section-title"><div><h3>Invite pasangan</h3><p>Link berlaku 7 hari.</p></div></div>${snapshot.household.role === "owner" ? `<button id="makeInvite" class="primary">Buat invite link</button><div id="inviteBox" style="margin-top:12px"></div>` : `<div class="insight">Hanya owner yang bisa membuat invite.</div>`}</div></div></div>`;
+  app.innerHTML = `<div class="content utilities-content family-content"><section class="card utility-card members-card"><div class="section-title"><div><h3>Anggota keluarga</h3><p>${esc(snapshot.household.name)}</p></div><span class="panel-count">${snapshot.members.length}</span></div><div class="member-list">${snapshot.members.map((m) => `<div class="member-row"><span class="member-avatar" aria-hidden="true">${esc((m.name || "?").trim().slice(0, 1).toUpperCase())}</span><div class="member-copy"><b>${esc(m.name)}</b><span>${esc(m.email)}</span></div><span class="pill">${esc(m.role)}</span></div>`).join("")}</div></section><section class="card utility-card invite-card"><div class="section-title"><div><h3>Undang pasangan</h3><p>Tautan aman dan berlaku selama 7 hari.</p></div></div>${snapshot.household.role === "owner" ? `<button id="makeInvite" class="primary">${icon("plus")}<span>Buat tautan undangan</span></button><div id="inviteBox"></div>` : `<div class="insight">Hanya pemilik keluarga yang dapat membuat undangan.</div>`}</section></div>`;
   document.querySelector("#makeInvite")?.addEventListener("click", async () => {
     const d = await api("/api/invites", { method: "POST" }),
       url = `${location.origin}${d.joinPath}`;
     document.querySelector("#inviteBox").innerHTML =
-      `<div class="code-box">${esc(url)}</div><button id="copyInvite" class="secondary" style="margin-top:8px">Copy link</button>`;
+      `<div class="code-box">${esc(url)}</div><button id="copyInvite" class="secondary">${icon("copy")}<span>Salin tautan</span></button>`;
     document.querySelector("#copyInvite").onclick = () =>
       navigator.clipboard
         .writeText(url)
@@ -678,7 +677,7 @@ async function renderUsers() {
     app.innerHTML = `<div class="content"><div class="card"><div class="insight bad">Akses ditolak. Halaman ini hanya untuk superadmin.</div></div></div>`;
     return;
   }
-  app.innerHTML = `<div class="content"><div class="card"><div class="section-title"><div><h3>Kelola User</h3><p>Daftar pengguna terdaftar di sistem dan peran hak akses.</p></div><button id="addUserBtn" class="primary"><span class="button-icon">${icon("plus")}</span><span>Tambah User</span></button></div><div id="usersContainer" class="empty">Memuat daftar user...</div></div></div>`;
+  app.innerHTML = `<div class="content users-content"><section class="card users-panel"><div class="section-title users-heading"><div><h3>Kelola user</h3><p>Atur akun dan hak akses keluarga.</p></div><button id="addUserBtn" class="primary"><span class="button-icon">${icon("plus")}</span><span>Tambah</span></button></div><div id="usersContainer" class="empty">Memuat daftar user...</div></section></div>`;
   document.querySelector("#addUserBtn").onclick = () => openUserDialog();
   await loadUsersList();
 }
@@ -690,35 +689,15 @@ async function loadUsersList() {
       container.innerHTML = `<div class="empty">Belum ada user terdaftar.</div>`;
       return;
     }
-    container.className = "user-table-wrap";
+    container.className = "user-list";
     container.innerHTML = `
-      <table class="user-table">
-        <thead>
-          <tr>
-            <th>Nama</th>
-            <th>Email</th>
-            <th>Status</th>
-            <th>Role</th>
-            <th style="text-align:right">Aksi</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${res.users.map((u) => `
-            <tr>
-              <td><b>${esc(u.name)}</b>${u.id === me.user.id ? ` <span class="pill">Anda</span>` : ""}</td>
-              <td class="muted">${esc(u.email)}</td>
-              <td><span class="pill badge-${u.status}">${u.status === "active" ? "Aktif" : "Dinonaktifkan"}</span></td>
-              <td>${u.is_superadmin ? `<span class="pill badge-admin">Superadmin</span>` : `<span class="pill">Member</span>`}</td>
-              <td>
-                <div class="user-actions">
-                  <button class="icon-btn edit-user" data-user='${esc(JSON.stringify(u))}' title="Edit user" aria-label="Edit user">${icon("edit")}</button>
-                  ${u.id !== me.user.id ? `<button class="icon-btn danger-action delete-user" data-id="${u.id}" data-name="${esc(u.name)}" title="Hapus user" aria-label="Hapus">${icon("trash")}</button>` : ""}
-                </div>
-              </td>
-            </tr>
-          `).join("")}
-        </tbody>
-      </table>`;
+      ${res.users.map((u) => `
+        <article class="user-row">
+          <div class="user-identity"><span class="user-avatar" aria-hidden="true">${esc((u.name || "?").trim().slice(0, 1).toUpperCase())}</span><div><div class="user-name"><strong>${esc(u.name)}</strong>${u.id === me.user.id ? `<span class="pill">Anda</span>` : ""}</div><span class="user-email">${esc(u.email)}</span></div></div>
+          <div class="user-badges"><span class="pill badge-${u.status}">${u.status === "active" ? "Aktif" : "Dinonaktifkan"}</span>${u.is_superadmin ? `<span class="pill badge-admin">Superadmin</span>` : `<span class="pill">Member</span>`}</div>
+          <div class="user-actions"><button class="icon-btn edit-user" data-user='${esc(JSON.stringify(u))}' title="Ubah user" aria-label="Ubah user ${esc(u.name)}">${icon("edit")}</button>${u.id !== me.user.id ? `<button class="icon-btn danger-action delete-user" data-id="${u.id}" data-name="${esc(u.name)}" title="Hapus user" aria-label="Hapus user ${esc(u.name)}">${icon("trash")}</button>` : ""}</div>
+        </article>
+      `).join("")}`;
     container.querySelectorAll(".edit-user").forEach((btn) => {
       btn.onclick = () => openUserDialog(JSON.parse(btn.dataset.user));
     });
@@ -859,7 +838,7 @@ function bindCommon() {
 function navigate(view) {
   const fromMenu = moreDialog.open;
   applyNavigation(navigation.save({ view, month: followingCurrentMonth ? null : currentMonth }));
-  setMonthPickerOpen(false);
+  monthPicker.blur();
   setMoreOpen(false);
   render();
   window.scrollTo({ top: 0, behavior: "instant" });
@@ -876,7 +855,7 @@ function restoreNavigation() {
   if (state.view === currentView && state.month === currentMonth) return;
   const monthChanged = state.month !== currentMonth;
   applyNavigation(state);
-  setMonthPickerOpen(false);
+  monthPicker.blur();
   setMoreOpen(false);
   renderChrome();
   render();
@@ -917,7 +896,6 @@ const pullRefresh = createPullRefresh({
   },
 });
 refreshButton.innerHTML = icon("refresh");
-document.querySelector("[data-pull-icon]").innerHTML = icon("refresh");
 refreshButton.onclick = () => {
   if (!canRefreshView()) return toast("Simpan atau batalkan isian dulu sebelum memperbarui.");
   void pullRefresh.refresh();
@@ -927,7 +905,7 @@ document.querySelectorAll(".nav").forEach((button) => {
 });
 function setMoreOpen(open) {
   if (open) {
-    setMonthPickerOpen(false);
+    monthPicker.blur();
     closeSelects();
     if (!moreDialog.open) moreDialog.showModal();
     document.body.classList.add("menu-open");
@@ -944,44 +922,19 @@ moreDialog.addEventListener("close", () => {
   document.body.classList.remove("menu-open");
   moreButton.setAttribute("aria-expanded", "false");
 });
-function setMonthPickerOpen(open) {
-  monthControl.classList.toggle("open", open);
-  monthPicker.setAttribute("aria-expanded", String(open));
-}
-monthPicker.onclick = () => setMonthPickerOpen(monthPicker.getAttribute("aria-expanded") !== "true");
-document.querySelector(".month-picker-chevron").innerHTML = icon("chevron");
-document.addEventListener("pointerdown", (event) => {
-  if (!monthControl.contains(event.target)) setMonthPickerOpen(false);
-});
-monthControl.addEventListener("focusout", (event) => {
-  if (!monthControl.contains(event.relatedTarget)) setMonthPickerOpen(false);
-});
 window.matchMedia("(max-width: 760px)").addEventListener("change", () => {
-  setMonthPickerOpen(false);
   setMoreOpen(false);
 });
-document.querySelector("#prevMonthBtn").innerHTML = icon("chevronLeft");
-document.querySelector("#nextMonthBtn").innerHTML = icon("chevronRight");
-document.querySelector("#currentMonthBtn").innerHTML = `${icon("today")}<span class="month-reset-label">Bulan ini</span>`;
-document.querySelector("#prevMonthBtn").onclick = () => shiftMonth(-1);
-document.querySelector("#nextMonthBtn").onclick = () => shiftMonth(1);
-document.querySelector("#currentMonthBtn").onclick = () => {
-  const wasOpen = monthPicker.getAttribute("aria-expanded") === "true";
-  resetMonth();
-  setMonthPickerOpen(false);
-  if (wasOpen) monthPicker.focus();
-};
-document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") {
-    setMoreOpen(false);
-    if (monthPicker.getAttribute("aria-expanded") === "true") {
-      setMonthPickerOpen(false);
-      monthPicker.focus();
-    }
-  }
+monthPicker.addEventListener("change", () => {
+  const month = monthPicker.value;
+  if (!/^\d{4}-\d{2}$/.test(month) || month === currentMonth) return;
+  applyNavigation(navigation.save({ view: currentView, month }));
+  renderChrome();
+  render();
+  refreshSnapshot().catch((error) => toast(error.message));
 });
 document.querySelector("#quickAdd").onclick = () => {
-  setMonthPickerOpen(false);
+  monthPicker.blur();
   openTx();
 };
 document.querySelectorAll("dialog").forEach((dialog) => {

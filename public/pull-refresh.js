@@ -21,6 +21,8 @@ export function createPullRefresh({ root, indicator, canRefresh, onRefresh }) {
     indicator.dataset.state = state;
     indicator.style.setProperty("--pull-distance", `${offset}px`);
     indicator.style.setProperty("--pull-rotation", `${offset / threshold * 180}deg`);
+    indicator.style.setProperty("--pull-progress", `${Math.min(1, offset / threshold)}`);
+    indicator.style.setProperty("--pull-angle", `${Math.min(360, Math.round(offset / threshold * 360))}deg`);
     if (label.textContent !== message) label.textContent = message;
   }
   async function refresh() {

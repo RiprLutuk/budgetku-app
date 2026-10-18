@@ -8,6 +8,7 @@ export function createTransactionDialog({ dialog, getSnapshot, save, onDelete, o
   const fields = form.elements;
   const title = dialog.querySelector('#txDialogTitle');
   const submitLabel = dialog.querySelector('#txSubmitLabel');
+  const typeHint = dialog.querySelector('#txTypeHint');
   const deleteBtn = dialog.querySelector('#txDeleteBtn');
   const history = dialog.querySelector('#txHistory');
   let category;
@@ -16,6 +17,8 @@ export function createTransactionDialog({ dialog, getSnapshot, save, onDelete, o
   let data;
   let editingId = null;
   let editingVersion = 0;
+  let amountHint = '';
+  let suggestedGoalId = '';
   hydrateIcons(dialog);
 
   function categoryForGoal(goalId) {
@@ -27,11 +30,29 @@ export function createTransactionDialog({ dialog, getSnapshot, save, onDelete, o
   function syncHint() {
     const selected = data?.goals.find((item) => item.id === goal.value);
     const withdrawal = fields.type.value === 'income';
+    const goalLabel = form.querySelector('label[for="txGoal"]');
+    const noteLabel = form.querySelector('label[for="txNote"]');
     form.querySelector('#goalHint').textContent = selected
       ? withdrawal
         ? `Mencairkan ${selected.name} ke kas. Ini bukan pemasukan baru dan tidak mengubah pendapatan.`
-        : `Menambah tabungan ${selected.name} dan mengurangi saldo kas sekali.`
+        : `Menambah tabungan ${selected.name} dan mengurangi saldo kas sekali.${selected.id === suggestedGoalId && amountHint ? ` ${amountHint}` : ''}`
       : withdrawal ? 'Kosongkan jika ini pendapatan kerja. Pilih goal hanya saat mencairkan tabungan.' : '';
+    goalLabel.textContent = withdrawal ? 'Cairkan dari tabungan (opsional)' : 'Simpan ke tabungan (opsional)';
+    noteLabel.firstChild.textContent = selected && withdrawal ? 'Keterangan pencairan' : selected ? 'Keterangan setoran' : 'Nama / catatan';
+    fields.note.placeholder = selected && withdrawal ? `Pencairan ${selected.name}` : selected ? `Tabungan ${selected.name}` : withdrawal ? 'Contoh: Gaji Oktober' : 'Contoh: Belanja bulanan';
+    if (editingId) {
+      typeHint.textContent = 'Periksa kembali perubahan sebelum menyimpan koreksi.';
+      submitLabel.textContent = 'Simpan';
+    } else if (selected && withdrawal) {
+      typeHint.textContent = 'Uang tabungan dipindahkan kembali ke kas, bukan dicatat sebagai pendapatan baru.';
+      submitLabel.textContent = 'Simpan';
+    } else if (selected) {
+      typeHint.textContent = 'Setoran ini mengurangi kas dan menambah saldo tabungan yang dipilih.';
+      submitLabel.textContent = 'Simpan';
+    } else {
+      typeHint.textContent = withdrawal ? 'Catat uang yang benar-benar diterima; jangan pilih tabungan kecuali untuk pencairan.' : 'Catat uang yang benar-benar sudah dibelanjakan.';
+      submitLabel.textContent = 'Simpan';
+    }
   }
   function syncGoal() {
     const selected = data?.categories.find((item) => item.id === category.value);
@@ -41,22 +62,22 @@ export function createTransactionDialog({ dialog, getSnapshot, save, onDelete, o
   }
   function syncType() {
     const income = fields.type.value === 'income';
+    const transactionGrid = form.querySelector('.category-row').parentElement;
     form.querySelectorAll('[data-type]').forEach((button) => {
       const active = button.dataset.type === fields.type.value;
       button.classList.toggle('active', active);
       button.setAttribute('aria-pressed', String(active));
     });
     form.querySelector('.category-row').classList.toggle('hidden', income);
+    transactionGrid.classList.toggle('is-income', income);
     form.querySelector('.need-row').classList.toggle('hidden', income || Boolean(goal.value));
     category.setDisabled(income);
     goal.setDisabled(false);
     form.querySelector('#paidByLabel').textContent = income ? 'Diterima oleh' : 'Dibayar oleh';
-    form.querySelector('label[for="txGoal"]').textContent = income ? 'Pencairan dari goal (opsional)' : 'Alokasi tabungan (opsional)';
     syncHint();
   }
   form.querySelectorAll('[data-type]').forEach((button) => {
     button.onclick = () => {
-      if (fields.type.value !== button.dataset.type) goal.value = '';
       fields.type.value = button.dataset.type;
       if (fields.type.value === 'expense') syncGoal();
       syncType();
@@ -77,6 +98,7 @@ export function createTransactionDialog({ dialog, getSnapshot, save, onDelete, o
 
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
+    fields.amount.setCustomValidity('');
     if (!validateForm(form)) return;
     formMessage(feedback);
     try {
@@ -87,6 +109,13 @@ export function createTransactionDialog({ dialog, getSnapshot, save, onDelete, o
         return;
       }
       const income = fields.type.value === 'income';
+      const selectedGoal = data?.goals.find((item) => item.id === goal.value);
+      if (income && selectedGoal && amount > Number(selectedGoal.current || 0)) {
+        fields.amount.setCustomValidity(`Pencairan melebihi saldo ${selectedGoal.name} yang tersedia.`);
+        fields.amount.reportValidity();
+        return;
+      }
+      fields.amount.setCustomValidity('');
       const payload = {
         type: fields.type.value,
         amount,
@@ -118,8 +147,10 @@ export function createTransactionDialog({ dialog, getSnapshot, save, onDelete, o
       formMessage(feedback);
       editingId = prefill.id || null;
       editingVersion = Number(prefill.version || 0);
+      amountHint = prefill.amountHint || '';
+      suggestedGoalId = prefill.goalId || prefill.goal_id || '';
       title.textContent = editingId ? 'Koreksi transaksi' : 'Catat transaksi';
-      submitLabel.textContent = editingId ? 'Simpan koreksi' : 'Simpan transaksi';
+      submitLabel.textContent = 'Simpan';
       deleteBtn.hidden = !editingId;
       fields.type.value = prefill.type || 'expense';
       fields.amount.value = formatMoneyInput(prefill.amount || '');

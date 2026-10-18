@@ -1,4 +1,4 @@
-const CACHE = 'budgetku-family-v28-mobile-cockpit';
+const CACHE = 'budgetku-family-v35-financial-ledger-assets';
 const ASSETS = [
   '/',
   '/index.html',
@@ -9,6 +9,7 @@ const ASSETS = [
   '/forms.js',
   '/cashflow.js',
   '/goal-math.js',
+  '/goal-icons.js',
   '/components/transaction-dialog.js',
   '/views/dashboard.js',
   '/views/goals.js',
@@ -16,6 +17,7 @@ const ASSETS = [
   '/ui.js',
   '/exports.js',
   '/money.js',
+  '/privacy.js',
   '/favicon.svg',
   '/logo.svg',
   '/manifest.webmanifest',
@@ -28,7 +30,13 @@ const ASSETS = [
 ];
 self.addEventListener('install', (e) => {
   self.skipWaiting();
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)));
+  e.waitUntil((async () => {
+    const cache = await caches.open(CACHE);
+    await Promise.allSettled(ASSETS.map(async (asset) => {
+      const response = await fetch(asset, { cache: 'no-cache' });
+      if (response.ok) await cache.put(asset, response);
+    }));
+  })());
 });
 self.addEventListener('activate', (e) => {
   e.waitUntil(
@@ -40,14 +48,21 @@ self.addEventListener('activate', (e) => {
 });
 self.addEventListener('fetch', (e) => {
   const u = new URL(e.request.url);
-  if (e.request.method !== 'GET' || u.pathname.startsWith('/api/') || u.pathname.startsWith('/auth/') || u.pathname.startsWith('/receipts/')) return;
+  if (e.request.method !== 'GET' || u.origin !== self.location.origin || u.pathname.startsWith('/api/') || u.pathname.startsWith('/auth/') || u.pathname.startsWith('/receipts/')) return;
   e.respondWith(
     fetch(e.request)
-      .then((r) => {
-        const copy = r.clone();
-        caches.open(CACHE).then((c) => c.put(e.request, copy));
-        return r;
+      .then(async (response) => {
+        if (response.ok) {
+          const cache = await caches.open(CACHE);
+          await cache.put(e.request, response.clone());
+        }
+        return response;
       })
-      .catch(() => caches.match(e.request).then((r) => r || caches.match('/index.html')))
+      .catch(async () => {
+        const cached = await caches.match(e.request);
+        if (cached) return cached;
+        if (e.request.mode === 'navigate') return (await caches.match('/index.html')) || Response.error();
+        return Response.error();
+      })
   );
 });

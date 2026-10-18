@@ -23,12 +23,12 @@
         <button data-view="dashboard" class="nav active"><span class="nav-icon">⌂</span><span>Dashboard</span></button>
         <button data-view="transactions" class="nav"><span class="nav-icon">↕</span><span>Transaksi</span></button>
         <button data-view="budget" class="nav"><span class="nav-icon">◫</span><span><span class="nav-desktop-label">Auto </span>Budget</span></button>
-        <button data-view="goals" class="nav"><span class="nav-icon">◎</span><span>Goals</span></button>
+        <button data-view="goals" class="nav"><span class="nav-icon">◎</span><span>Tabungan</span></button>
         <button type="button" class="nav-more" aria-label="Buka menu lainnya" aria-haspopup="dialog" aria-controls="moreDialog" aria-expanded="false"><span class="nav-icon"></span><span>Lainnya</span></button>
         <button data-view="receipts" class="nav nav-secondary"><span class="nav-icon">▤</span><span>Nota & Gmail</span></button>
-        <button data-view="family" class="nav nav-secondary"><span class="nav-icon">♧</span><span>Family</span></button>
+        <button data-view="family" class="nav nav-secondary"><span class="nav-icon">♧</span><span>Keluarga</span></button>
         <button data-view="users" class="nav admin-only nav-secondary hidden"><span class="nav-icon">♙</span><span>Kelola User</span></button>
-        <button data-view="settings" class="nav nav-secondary"><span class="nav-icon">⚙</span><span>Settings</span></button>
+        <button data-view="settings" class="nav nav-secondary"><span class="nav-icon">⚙</span><span>Pengaturan</span></button>
       </nav>
       <div class="side-note" id="userMini"></div>
     </aside>
@@ -41,14 +41,9 @@
         </div>
         <div class="page-tools-actions">
           <div id="monthControl" class="month-control">
-            <button id="monthPickerBtn" class="month-picker-btn" type="button" aria-label="Pilih bulan" aria-controls="monthNavigator" aria-expanded="false"><span id="compactMonthLabel"></span><span class="month-picker-chevron" aria-hidden="true"></span></button>
-            <div id="monthNavigator" class="month-navigator" role="group" aria-label="Navigasi bulan">
-              <button id="prevMonthBtn" class="month-nav-btn" type="button" aria-label="Bulan sebelumnya" title="Bulan sebelumnya"></button>
-              <span id="monthLabel" aria-live="polite" aria-atomic="true"></span>
-              <button id="nextMonthBtn" class="month-nav-btn" type="button" aria-label="Bulan berikutnya" title="Bulan berikutnya"></button>
-              <button id="currentMonthBtn" class="month-nav-reset" type="button" aria-label="Kembali ke bulan ini" title="Kembali ke bulan ini" hidden></button>
-            </div>
+            <input id="monthPicker" class="month-picker-input" type="month" aria-label="Pilih bulan" />
           </div>
+          <button id="togglePrivacy" class="icon-btn privacy-toggle" type="button" aria-label="Sembunyikan nominal" aria-pressed="false" title="Sembunyikan nominal"></button>
           <button id="refreshData" class="icon-btn page-refresh-btn" type="button" aria-label="Perbarui data" title="Perbarui data"></button>
           <button id="quickAdd" class="primary icon-label" aria-label="Catat transaksi"><span class="button-icon">＋</span><span class="hide-compact">Transaksi</span></button>
         </div>
@@ -58,8 +53,8 @@
   </div>
 
   <div id="pullRefresh" class="pull-refresh" role="status" aria-live="polite" aria-atomic="true" data-state="idle" hidden>
-    <span class="pull-refresh-icon" data-pull-icon aria-hidden="true"></span>
-    <span data-pull-label>Tarik untuk memperbarui</span>
+    <span class="pull-refresh-ring" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round"><path d="M19 10a7.5 7.5 0 0 0-13.6-3.8L4 8"/><path d="M4 4v4h4"/><path d="M5 14a7.5 7.5 0 0 0 13.6 3.8L20 16"/><path d="M20 20v-4h-4"/></svg></span>
+    <span class="sr-only" data-pull-label>Tarik untuk memperbarui</span>
   </div>
 
   <dialog id="moreDialog" class="more-dialog" aria-labelledby="moreDialogTitle">
@@ -70,9 +65,9 @@
       </div>
       <nav class="more-nav-list" aria-label="Menu lainnya">
         <button data-view="receipts" class="nav more-nav"><span class="nav-icon"></span><span>Nota & Gmail</span></button>
-        <button data-view="family" class="nav more-nav"><span class="nav-icon"></span><span>Family</span></button>
+        <button data-view="family" class="nav more-nav"><span class="nav-icon"></span><span>Keluarga</span></button>
         <button data-view="users" class="nav admin-only more-nav hidden"><span class="nav-icon"></span><span>Kelola User</span></button>
-        <button data-view="settings" class="nav more-nav"><span class="nav-icon"></span><span>Settings</span></button>
+        <button data-view="settings" class="nav more-nav"><span class="nav-icon"></span><span>Pengaturan</span></button>
       </nav>
       <div class="more-account" id="moreUser"></div>
     </div>
@@ -88,6 +83,7 @@
         <button type="button" data-type="expense" class="type-btn active" aria-pressed="true">Pengeluaran</button>
         <button type="button" data-type="income" class="type-btn" aria-pressed="false">Pemasukan</button>
       </div>
+      <p id="txTypeHint" class="transaction-type-hint" role="status" aria-live="polite"></p>
       <input type="hidden" name="type" value="expense" />
       <div class="form-grid transaction-grid">
         <label for="txAmount">Nominal (Rp)<input id="txAmount" name="amount" class="money-input" inputmode="numeric" placeholder="150.000" autocomplete="off" required /></label>

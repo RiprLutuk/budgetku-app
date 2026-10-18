@@ -44,6 +44,9 @@ try {
   for (const [table, column, definition] of [
     ['goals', 'purpose', "TEXT NOT NULL DEFAULT 'general' CHECK(purpose IN ('general','emergency'))"],
     ['households', 'essential_monthly', 'INTEGER NOT NULL DEFAULT 0 CHECK(essential_monthly>=0)'],
+    ['households', 'planned_income', 'INTEGER NOT NULL DEFAULT 0 CHECK(planned_income>=0)'],
+    ['households', 'cash_opening_balance', 'INTEGER NOT NULL DEFAULT 0 CHECK(cash_opening_balance>=0)'],
+    ['households', 'cash_opening_date', 'TEXT'],
     ['transactions', 'version', 'INTEGER NOT NULL DEFAULT 0'],
   ]) {
     if (!db.prepare(`PRAGMA table_info(${table})`).all().some((item) => item.name === column)) {

@@ -311,7 +311,7 @@ app.get("/api/snapshot", async (c) => {
   return json(c, {
     month,
     asOf,
-    household: { id: household.id, name: household.name, role: household.role, monthly_limit: household.monthly_limit, essential_monthly: household.essential_monthly },
+    household: { id: household.id, name: household.name, role: household.role, monthly_limit: household.monthly_limit, essential_monthly: household.essential_monthly, planned_income: household.planned_income, cash_opening_balance: household.cash_opening_balance, cash_opening_date: household.cash_opening_date },
     members: members.rows,
     categories: categories.rows,
     transactions: transactions.rows,
@@ -359,6 +359,19 @@ async function saveTransaction(c) {
   }
   if (goalId && !(await queryOne(db, "SELECT id FROM goals WHERE id=? AND household_id=?", [goalId, household.id]))) {
     return json(c, { error: "Goal tidak valid" }, 400);
+  }
+  if (goalId && type === "income") {
+    const balance = await queryOne(db,
+      `SELECT g.current + COALESCE(SUM(CASE WHEN t.type='expense' THEN t.amount ELSE -t.amount END), 0) AS available
+       FROM goals g
+       LEFT JOIN transactions t ON t.goal_id=g.id AND t.household_id=g.household_id AND (? IS NULL OR t.id != ?)
+       WHERE g.id=? AND g.household_id=?
+       GROUP BY g.id`,
+      [editingId, editingId, goalId, household.id],
+    );
+    if (amount > Number(balance?.available || 0)) {
+      return json(c, { error: "Nominal pencairan melebihi saldo tabungan yang tersedia." }, 400);
+    }
   }
   const paidBy = String(body.paidBy || "shared").trim();
   if (paidBy !== "shared") {
@@ -541,10 +554,13 @@ app.put("/api/household", async (c) => {
   const name = String(body.name ?? household.name).trim();
   const monthlyLimit = body.monthlyLimit ?? household.monthly_limit;
   const essentialMonthly = body.essentialMonthly ?? household.essential_monthly;
-  if (!name || name.length > 100 || !validMoney(monthlyLimit) || !validMoney(essentialMonthly)) {
+  const plannedIncome = body.plannedIncome ?? household.planned_income;
+  const cashOpeningBalance = body.cashOpeningBalance ?? household.cash_opening_balance;
+  const cashOpeningDate = body.cashOpeningDate === undefined ? household.cash_opening_date : String(body.cashOpeningDate || '').trim() || null;
+  if (!name || name.length > 100 || !validMoney(monthlyLimit) || !validMoney(essentialMonthly) || !validMoney(plannedIncome) || !validMoney(cashOpeningBalance) || (cashOpeningDate && !validDate(cashOpeningDate))) {
     return json(c, { error: "Settings tidak valid" }, 400);
   }
-  await db.execute({ sql: "UPDATE households SET name=?,monthly_limit=?,essential_monthly=? WHERE id=?", args: [name, monthlyLimit, essentialMonthly, household.id] });
+  await db.execute({ sql: "UPDATE households SET name=?,monthly_limit=?,essential_monthly=?,planned_income=?,cash_opening_balance=?,cash_opening_date=? WHERE id=?", args: [name, monthlyLimit, essentialMonthly, plannedIncome, cashOpeningBalance, cashOpeningDate, household.id] });
   return json(c, { ok: true });
 });
 

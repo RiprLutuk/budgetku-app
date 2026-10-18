@@ -15,9 +15,14 @@ function goalBalances(goals = []) {
   }, { total: 0, emergency: 0 });
 }
 
-export function summarizeCashflow(monthlySummary = [], month, transactions = [], goals = []) {
+export function summarizeCashflow(monthlySummary = [], month, transactions = [], goals = [], household = {}) {
   const source = monthlySummary.length ? monthlySummary : buildMonthlySummary(transactions);
-  let openingBalance = 0;
+  const openingMonth = String(household.cash_opening_date || '').slice(0, 7);
+  // An opening balance is a ledger anchor, not income.  Apply it only from
+  // the configured start period so it cannot rewrite reports before the
+  // household started keeping books in BudgetKu.
+  const openingApplies = !openingMonth || openingMonth <= month;
+  let openingBalance = openingApplies ? Math.max(0, amount(household.cash_opening_balance)) : 0;
   let income = 0;
   let goalWithdrawals = 0;
   let expense = 0;
@@ -25,7 +30,7 @@ export function summarizeCashflow(monthlySummary = [], month, transactions = [],
   let needsExpense = 0;
   for (const summary of source) {
     const cashInflow = amount(summary.cash_inflow ?? amount(summary.income) + amount(summary.goal_withdrawals));
-    if (summary.month < month) {
+    if (summary.month < month && (!openingMonth || summary.month >= openingMonth)) {
       openingBalance += cashInflow - amount(summary.expense);
     } else if (summary.month === month) {
       income = amount(summary.income);
@@ -67,6 +72,7 @@ export function financialHealth(summary = {}, monthlySummary = [], month, goals 
   const allocationBasis = income;
   const retained = income - spending;
   const unallocated = Math.max(0, retained - savings);
+  const plannedOutflow = spending + savings;
   const share = (value) => allocationBasis ? Math.round((value / allocationBasis) * 100) : 0;
   const allocation = {
     needs: share(needs),
@@ -122,7 +128,7 @@ export function financialHealth(summary = {}, monthlySummary = [], month, goals 
     allocationBasis,
     allocation,
     unallocated,
-    deficit: Math.max(0, -unallocated),
+    deficit: Math.max(0, plannedOutflow - income),
     cashDeficit: Math.max(0, -amount(summary.cashflow)),
     savingsRate: income ? savings / income : null,
     cashRetentionRate: amount(summary.cashInflow) ? amount(summary.cashflow) / amount(summary.cashInflow) : null,
