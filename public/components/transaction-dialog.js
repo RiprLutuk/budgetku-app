@@ -17,6 +17,7 @@ export function createTransactionDialog({ dialog, getSnapshot, save, onDelete, o
   let data;
   let editingId = null;
   let editingVersion = 0;
+  let existingAssetId = null;
   let amountHint = '';
   let suggestedGoalId = '';
   hydrateIcons(dialog);
@@ -79,8 +80,8 @@ export function createTransactionDialog({ dialog, getSnapshot, save, onDelete, o
     form.querySelector('.category-row').classList.toggle('hidden', income);
     transactionGrid.classList.toggle('is-income', income);
     form.querySelector('.need-row').classList.toggle('hidden', income || Boolean(goal.value));
-    form.querySelector('.asset-row').classList.toggle('hidden', income || Boolean(goal.value));
-    if (income || goal.value) fields.isAsset.checked = false;
+    form.querySelector('.asset-row').classList.toggle('hidden', income);
+    if (income) fields.isAsset.checked = false;
     syncAsset();
     category.setDisabled(income);
     goal.setDisabled(false);
@@ -88,11 +89,11 @@ export function createTransactionDialog({ dialog, getSnapshot, save, onDelete, o
     syncHint();
   }
   function syncAsset() {
-    const enabled = fields.isAsset.checked && fields.type.value === 'expense' && !goal.value;
+    const enabled = fields.isAsset.checked && fields.type.value === 'expense';
     const assetFields = form.querySelector('.asset-fields');
     assetFields.hidden = !enabled;
     fields.assetName.required = enabled;
-    fields.need.disabled = enabled;
+    fields.need.disabled = enabled || Boolean(goal.value);
     if (enabled) fields.need.checked = false;
   }
   form.querySelectorAll('[data-type]').forEach((button) => {
@@ -103,7 +104,12 @@ export function createTransactionDialog({ dialog, getSnapshot, save, onDelete, o
     };
   });
   form.querySelectorAll('[data-dialog-close]').forEach((button) => { button.onclick = () => dialog.close(); });
-  fields.isAsset.addEventListener('change', syncAsset);
+  fields.isAsset.addEventListener('change', () => {
+    if (fields.isAsset.checked && goal.value) {
+      goal.value = '';
+      syncType();
+    } else syncAsset();
+  });
   dialog.addEventListener('close', closeSelects);
 
   deleteBtn.onclick = async () => {
@@ -144,7 +150,7 @@ export function createTransactionDialog({ dialog, getSnapshot, save, onDelete, o
         goalId: goal.value || null,
         date: fields.date.value,
         need: !income && !goal.value && fields.need.checked,
-        asset: !income && !goal.value && fields.isAsset.checked ? { name: fields.assetName.value.trim(), type: fields.assetType.value } : null,
+        asset: !income && fields.isAsset.checked && !existingAssetId ? { name: fields.assetName.value.trim(), type: fields.assetType.value } : null,
         paidBy: paidBy.value,
         source: fields.source.value,
         receiptUrl: fields.receiptUrl.value || null,
@@ -168,6 +174,7 @@ export function createTransactionDialog({ dialog, getSnapshot, save, onDelete, o
       formMessage(feedback);
       editingId = prefill.id || null;
       editingVersion = Number(prefill.version || 0);
+      existingAssetId = prefill.asset_id || null;
       amountHint = prefill.amountHint || '';
       suggestedGoalId = prefill.goalId || prefill.goal_id || '';
       title.textContent = editingId ? 'Koreksi transaksi' : 'Catat transaksi';
@@ -181,7 +188,7 @@ export function createTransactionDialog({ dialog, getSnapshot, save, onDelete, o
       fields.need.checked = prefill.need !== undefined ? Boolean(prefill.need) : true;
       fields.isAsset.checked = Boolean(prefill.asset_id);
       fields.assetName.value = prefill.asset_name || '';
-      fields.isAsset.disabled = Boolean(editingId && prefill.asset_id);
+      fields.isAsset.disabled = Boolean(prefill.asset_id);
       fields.source.value = prefill.source || 'manual';
       fields.receiptUrl.value = prefill.receiptUrl || prefill.receipt_url || '';
       fields.externalRef.value = prefill.externalRef || prefill.external_ref || (editingId ? '' : `manual:${crypto.randomUUID()}`);

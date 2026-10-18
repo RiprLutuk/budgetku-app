@@ -1,4 +1,4 @@
-const CACHE = 'budgetku-family-v38-compact-health-assets';
+const CACHE = 'budgetku-family-v39-asset-correction-assets';
 const ASSETS = [
   '/',
   '/index.html',

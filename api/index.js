@@ -363,7 +363,6 @@ async function saveTransaction(c) {
     return json(c, { error: "Goal tidak valid" }, 400);
   }
   const assetInput = body.asset && typeof body.asset === "object" ? body.asset : null;
-  if (assetInput && editingId) return json(c, { error: "Aset baru tidak bisa ditambahkan saat mengoreksi transaksi. Buat transaksi aset baru agar riwayat tetap rapi." }, 400);
   if (assetInput && (type !== "expense" || goalId || typeof assetInput.name !== "string" || !assetInput.name.trim() || assetInput.name.trim().length > 80 || !["household", "vehicle", "property", "electronics", "investment"].includes(assetInput.type || "household"))) {
     return json(c, { error: "Pembelian aset harus berupa pengeluaran biasa dengan nama dan jenis aset yang valid." }, 400);
   }
@@ -401,11 +400,13 @@ async function saveTransaction(c) {
     external_ref: externalRef || null, version: nextVersion,
   };
   if (editingId) {
-    const result = await db.batch([
+    const statements = [
+      ...(assetInput ? [{ sql: "INSERT INTO assets(id,household_id,name,asset_type,acquisition_cost,current_value,acquired_at,created_at) VALUES(?,?,?,?,?,?,?,?)", args: [assetId, household.id, assetInput.name.trim(), assetInput.type || "household", amount, amount, date, now()] }] : []),
       transactionAudit({ id: id(), householdId: household.id, transactionId: editingId, actorId: user.id, action: "update", version: Number(existing.version || 0), after: nextTransaction, createdAt: now() }),
       { sql: "UPDATE transactions SET type=?,amount=?,note=?,category_id=?,goal_id=?,asset_id=?,tx_date=?,need=?,paid_by=?,receipt_url=?,version=? WHERE id=? AND household_id=? AND version=?", args: [type, amount, note, categoryId, goalId, assetId, date, nextTransaction.need, paidBy, receiptUrl, nextVersion, editingId, household.id, Number(existing.version || 0)] },
-    ]);
-    if (!result[1].rowsAffected) return json(c, { error: "Transaksi telah berubah. Muat ulang sebelum mencoba lagi." }, 409);
+    ];
+    const result = await db.batch(statements);
+    if (!result.at(-1).rowsAffected) return json(c, { error: "Transaksi telah berubah. Muat ulang sebelum mencoba lagi." }, 409);
     return json(c, { ok: true, id: editingId });
   }
   const transactionId = nextTransaction.id;
