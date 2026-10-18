@@ -26,7 +26,7 @@ export function createTransactionDialog({ dialog, getSnapshot, save, onDelete, o
     const selected = data?.goals.find((item) => item.id === goal.value);
     form.querySelector('#goalHint').textContent = selected
       ? `Menambah tabungan ${selected.name} dan mengurangi saldo kas sekali.`
-      : 'Pilih hanya jika transaksi ini adalah setoran tabungan keluarga.';
+      : '';
   }
   function syncGoal() {
     const selected = data?.categories.find((item) => item.id === category.value);

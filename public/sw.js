@@ -1,4 +1,4 @@
-const CACHE = 'budgetku-family-v19-bottom-navigation';
+const CACHE = 'budgetku-family-v20-compact-forms';
 const ASSETS = [
   '/',
   '/index.html',

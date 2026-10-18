@@ -76,6 +76,9 @@
   --shadow: 0 10px 30px rgba(16, 43, 55, 0.07);
   --shadow-lg: 0 24px 70px rgba(16, 43, 55, 0.14);
   --font-data: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --control-height: 34px;
+  --control-font-size: 13px;
+  --control-radius: 8px;
 }
 
 * { box-sizing: border-box; }
@@ -468,7 +471,7 @@ button.danger:hover {
 .form-stack,
 .form-grid {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 .form-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -482,6 +485,9 @@ button.danger:hover {
   justify-content: space-between;
   gap: 10px;
   margin-top: 2px;
+}
+.form-footer .actions {
+  margin-inline-start: auto;
 }
 .field-choice-card {
   display: flex;
@@ -497,6 +503,15 @@ button.danger:hover {
 .field-choice-card .field-help {
   margin: 0;
 }
+.need-row.field-choice-card {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.need-row .check {
+  width: 100%;
+  min-height: 36px;
+}
 .form-message {
   min-height: 18px;
   margin: 0;
@@ -504,6 +519,10 @@ button.danger:hover {
   line-height: 1.45;
 }
 .form-message[hidden] {
+  display: none;
+}
+.form-message:empty,
+.field-help:empty {
   display: none;
 }
 .form-message.good {
@@ -752,22 +771,31 @@ fieldset {
 /* Form Controls & Inputs */
 label {
   display: grid;
-  gap: 4px;
-  font-size: 12px;
+  gap: 3px;
+  font-size: 11px;
   font-weight: 600;
   color: #334155;
 }
 input, select, textarea {
   width: 100%;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 8px 10px;
-  font-size: 13px;
+  border-radius: var(--control-radius);
+  padding: 6px 9px;
+  font-size: var(--control-font-size);
+  font-weight: 400;
+  line-height: 1.25;
   color: var(--dark);
   background: #fff;
   outline: none;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
-  min-height: 40px;
+  min-height: var(--control-height);
+}
+input, select {
+  height: var(--control-height);
+}
+textarea {
+  min-height: calc(var(--control-height) * 2);
+  resize: vertical;
 }
 input[type="checkbox"],
 input[type="radio"] {
@@ -784,6 +812,7 @@ input[type="radio"] {
   gap: 8px;
   min-height: 32px;
   color: var(--dark);
+  font-size: 12px;
 }
 .check input[type="checkbox"] {
   flex: 0 0 16px;
@@ -827,11 +856,11 @@ dialog::backdrop {
 .dialog-card {
   background: #fff;
   border: 0;
-  border-radius: var(--radius-lg);
-  padding: 20px;
+  border-radius: var(--radius);
+  padding: 16px;
   box-shadow: none;
   display: grid;
-  gap: 12px;
+  gap: 8px;
   position: relative;
 }
 .dialog-card[aria-busy="true"] {
@@ -845,26 +874,30 @@ dialog::backdrop {
 }
 .dialog-head h3 {
   margin: 0;
-  font-size: 16px;
-  font-weight: 800;
+  font-size: 15px;
+  font-weight: 600;
   letter-spacing: -0.02em;
+}
+.dialog-head .icon-btn {
+  border-color: transparent;
+  background: transparent;
 }
 .segmented {
   display: grid;
   grid-template-columns: 1fr 1fr;
   background: #f1f5f9;
-  padding: 4px;
-  border-radius: var(--radius-sm);
+  padding: 3px;
+  border-radius: var(--control-radius);
   gap: 2px;
 }
 .type-btn {
   border: 0;
   background: transparent;
-  min-height: 36px;
-  padding: 7px 10px;
+  min-height: 32px;
+  padding: 5px 8px;
   border-radius: 6px;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--muted);
   transition: all 0.15s ease;
 }
@@ -1032,6 +1065,10 @@ dialog::backdrop {
 }
 
 @media (max-width: 760px) {
+  :root {
+    --control-height: 36px;
+    --control-font-size: 14px;
+  }
   .app-shell { grid-template-columns: 1fr; }
   .hide-compact { display: none; }
   .content { padding: 12px; }
@@ -1061,12 +1098,23 @@ dialog::backdrop {
   }
   .tx-row .hide-mobile { display: none; }
   .dialog-card {
-    padding: 16px;
-    gap: 10px;
+    padding: 14px;
+    border-radius: var(--radius);
   }
-  input:not([type="checkbox"]):not([type="radio"]), select, textarea {
-    font-size: 16px !important; /* Mencegah auto zoom iOS Safari */
-    min-height: 40px;
+  .dialog-card .form-footer {
+    gap: 8px;
+  }
+  .dialog-card .actions {
+    gap: 6px;
+  }
+  .dialog-card .actions button {
+    padding: 6px 10px;
+  }
+  .need-row .check {
+    min-height: 44px;
+  }
+  @supports (-webkit-touch-callout: none) {
+    :root { --control-font-size: 16px; }
   }
   .toast {
     left: 12px;
@@ -1088,7 +1136,7 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
   .transaction-grid { grid-template-columns: 1fr; }
 }
 @media (pointer: coarse) {
-  .primary, .secondary, .icon-btn, .type-btn { min-height: 40px; }
+  .primary, .secondary, .icon-btn { min-height: 40px; }
   .icon-btn { min-width: 40px; }
 }
 .search-select-control {
@@ -1099,7 +1147,7 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
   padding-right: 34px;
 }
 .search-select-input {
-  min-height: 40px;
+  min-height: var(--control-height);
 }
 .select-toggle {
   position: absolute;
@@ -1141,9 +1189,9 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
   align-items: center;
   justify-content: space-between;
   min-height: 34px;
-  padding: 8px 10px;
+  padding: 6px 9px;
   border-radius: 6px;
-  font-size: 13px;
+  font-size: var(--control-font-size);
   cursor: pointer;
   user-select: none;
   color: var(--dark);
@@ -1753,7 +1801,7 @@ button:active {
 .goal-card-actions .danger-action:hover { background: var(--bad-soft); }
 .goal-suggestions { display: flex; flex-wrap: wrap; gap: 4px; }
 .goal-suggestions > span { flex-basis: 100%; color: var(--muted); font-size: 11px; }
-.suggestion-chip { min-height: 44px; padding: 4px 8px; border: 0; border-radius: 6px; background: var(--primary-soft); color: var(--primary); font-size: 11px; }
+.suggestion-chip { min-height: 32px; padding: 4px 8px; border: 0; border-radius: 6px; background: var(--primary-soft); color: var(--primary); font-size: 11px; }
 .goal-empty { grid-column: 1 / -1; padding: 32px 16px; border: 1px dashed var(--border); border-radius: 14px; }
 .goal-empty {
   display: grid;
