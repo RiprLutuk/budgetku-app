@@ -61,7 +61,7 @@ npm run db:migrate:remote
 npm run deploy
 ```
 
-Migrasi pada `migrations/` hanya berisi skema, tanpa data pengguna. Aset deploy dibatasi ke `public/`; `data/` dan `.env` tidak menjadi aset publik.
+Migrasi pada `migrations/` berisi skema dan pembaruan preset bawaan, tanpa dump data pengguna. Aset deploy dibatasi ke `public/`; `data/` dan `.env` tidak menjadi aset publik.
 
 ```bash
 npm run check
@@ -81,6 +81,20 @@ Jangan menaruh token di repository, `.env`, atau `wrangler.jsonc`. Workflow hany
 mengirim aset dari `public/` dan kode Worker; database lokal tetap dikecualikan.
 
 Endpoint `/health` mengembalikan status Worker. `/api/*` dan `/auth/*` selalu diproses Worker, bukan fallback HTML. Database diakses melalui binding per-request, tanpa koneksi global atau file SQLite di Worker.
+
+## Preset Auto Budget
+
+Preset keluarga mengalokasikan total 100% dari pemasukan bulan terpilih, bukan saldo bawaan atau batas bulanan household. Jika belum ada pemasukan, nominal alokasi masih nol sampai pemasukan dicatat. Nominal mengikuti pemasukan tersebut, bukan batas rupiah tetap; persentase dapat diubah melalui **Ubah alokasi budget**.
+
+Dengan contoh basis Rp15.000.000 per bulan:
+
+- Makan Harian: 33% = Rp4.950.000, terpisah dari kopi.
+- Kopi & Jajan Kerja: 3% = Rp450.000, dibanding asumsi kopi Rp20.000 x 22 hari kerja = Rp440.000.
+- Transport & Parkir: 5% = Rp750.000, dibanding asumsi transport Rp400.000 + parkir Rp6.000-15.000 x 22 hari kerja = Rp532.000-730.000. Sabtu-Minggu tidak dihitung sebagai hari parkir kerja.
+
+Target makan sekitar Rp4-5 juta adalah batas pengeluaran yang perlu diusahakan, bukan estimasi bahwa pola belanja sekarang sudah cukup. Untuk keluarga tiga orang, asumsi 30 hari dengan sarapan Rp50.000-80.000, makan siang istri dan anak Rp30.000, makan siang kantor Rp30.000 x 22 hari kerja, serta makan malam Rp100.000-150.000 menghasilkan Rp6.060.000-8.460.000, belum termasuk makan siang suami saat akhir pekan. Target lebih rendah membutuhkan penyesuaian pola makan, terutama sarapan dan makan malam.
+
+Migrasi `0004` hanya memperbarui household yang seluruh 12 posnya masih persis preset lama, termasuk persentase dan urutannya. Budget kustom tidak ditimpa, termasuk kategori kopi yang sudah dibuat sendiri. ID kategori lama, transaksi, saldo, dan goals tidak diubah. Runtime SQLite menjalankan revisi ini satu kali saat startup; D1 menjalankannya lewat perintah migrasi saat deploy.
 
 ## Kolaborasi
 

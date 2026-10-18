@@ -4,6 +4,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
+import { DEFAULT_BUDGET, DEFAULT_GOALS } from './lib/defaults.js';
 import { BACKFILL_GOAL_LINKS_SQL, GOAL_TRANSACTIONS_INDEX_SQL } from './lib/goals.js';
 import apiApp from './api/index.js';
 import { sqliteBinding } from './lib/sqlite-binding.js';
@@ -50,6 +51,10 @@ try {
     }
   }
   db.exec(fs.readFileSync(path.join(__dirname, 'migrations/0003_financial_integrity.sql'), 'utf8').replace(/^ALTER TABLE[^\n]+/gm, ''));
+  if (!db.prepare("SELECT value FROM app_settings WHERE key='auto_budget_revision_0004'").get()) {
+    db.exec(fs.readFileSync(path.join(__dirname, 'migrations/0004_realistic_auto_budget.sql'), 'utf8'));
+    db.prepare("INSERT INTO app_settings(key,value) VALUES('auto_budget_revision_0004',?)").run(new Date().toISOString());
+  }
   const superCount = db.prepare("SELECT COUNT(*) AS count FROM users WHERE is_superadmin=1 AND status='active'").get().count;
   if (!superCount) {
     const firstUser = db.prepare('SELECT id FROM users ORDER BY created_at ASC LIMIT 1').get();
@@ -63,7 +68,6 @@ try {
 
 
 
-const DEFAULT_BUDGET=[['Kontrakan / Rumah',25],['Makan Harian',12],['Belanja Bulanan',8],['Pendidikan',10],['Transport',7],['Tagihan & Utilitas',5],['Kesehatan',3],['Dana Darurat',10],['Target Rumah',8],['Target Mobil',5],['Target Umroh',4],['Lifestyle',3]],DEFAULT_GOALS=[['Rumah',500000000],['Mobil',200000000],['Umroh',75000000]];
 const now=()=>new Date().toISOString(), uid=()=>crypto.randomUUID(), token=(n=24)=>crypto.randomBytes(n).toString('base64url'), normEmail=s=>String(s||'').trim().toLowerCase();
 function hashPassword(password,salt=token(16)){const hash=crypto.pbkdf2Sync(String(password),salt,120000,32,'sha256').toString('base64url');return `${salt}.${hash}`}
 function verifyPassword(password,stored=''){const [salt,expected]=stored.split('.');if(!salt||!expected)return false;const actual=hashPassword(password,salt).split('.')[1];return crypto.timingSafeEqual(Buffer.from(actual),Buffer.from(expected))}
