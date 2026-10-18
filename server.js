@@ -4,8 +4,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
-import { BACKFILL_GOAL_LINKS_SQL, GOAL_FOR_CATEGORY_SQL, GOALS_SNAPSHOT_SQL, GOAL_TRANSACTIONS_INDEX_SQL } from './lib/goals.js';
-import { MONTHLY_SUMMARY_SQL } from './lib/transactions.js';
+import { BACKFILL_GOAL_LINKS_SQL, GOAL_TRANSACTIONS_INDEX_SQL } from './lib/goals.js';
 import apiApp from './api/index.js';
 import { sqliteBinding } from './lib/sqlite-binding.js';
 
@@ -52,6 +51,8 @@ try {
   throw error;
 }
 
+
+
 const DEFAULT_BUDGET=[['Kontrakan / Rumah',25],['Makan Harian',12],['Belanja Bulanan',8],['Pendidikan',10],['Transport',7],['Tagihan & Utilitas',5],['Kesehatan',3],['Dana Darurat',10],['Target Rumah',8],['Target Mobil',5],['Target Umroh',4],['Lifestyle',3]],DEFAULT_GOALS=[['Rumah',500000000],['Mobil',200000000],['Umroh',75000000]];
 const now=()=>new Date().toISOString(), uid=()=>crypto.randomUUID(), token=(n=24)=>crypto.randomBytes(n).toString('base64url'), normEmail=s=>String(s||'').trim().toLowerCase();
 function hashPassword(password,salt=token(16)){const hash=crypto.pbkdf2Sync(String(password),salt,120000,32,'sha256').toString('base64url');return `${salt}.${hash}`}
@@ -69,14 +70,12 @@ function mime(p){return p.endsWith('.html')?'text/html; charset=utf-8':p.endsWit
 function staticFile(res,file){if(!fs.existsSync(file)||!fs.statSync(file).isFile())return false;const b=fs.readFileSync(file);res.writeHead(200,{'Content-Type':mime(file),'Content-Length':b.length});res.end(b);return true}
 function requireAuth(req,res){const u=sessionUser(req);if(!u){json(res,401,{error:'Silakan login dulu'});return null}return u}
 function requireHouse(req,res,u,url){const h=householdFor(u.id,req.headers['x-household-id']||url.searchParams.get('householdId'));if(!h){json(res,403,{error:'Tidak punya akses household'});return null}return h}
-function validMoney(value,minimum=0){return typeof value==='number'&&Number.isSafeInteger(value)&&value>=minimum}
-function validDate(value){if(!/^\d{4}-\d{2}-\d{2}$/.test(value))return false;const date=new Date(`${value}T00:00:00Z`);return !Number.isNaN(date.getTime())&&date.toISOString().slice(0,10)===value}
 
 
 const server=http.createServer(async(req,res)=>{try{
   const url=new URL(req.url,`http://${req.headers.host||'localhost'}`), p=url.pathname;
   if(req.method==='GET'&&p==='/health')return json(res,200,{ok:true,db:'sqlite',realtimeClients:clients.size});
-  if(p.startsWith('/api/auth/')||p.startsWith('/api/admin/')||p.startsWith('/api/account/')||p.startsWith('/api/gmail/')||p.startsWith('/auth/google')||p==='/api/me') {
+  if(p.startsWith('/api/auth/')||p.startsWith('/api/admin/')||p.startsWith('/api/account/')||p.startsWith('/api/gmail/')||p.startsWith('/auth/google')||p==='/api/me'||p==='/api/snapshot'||p==='/api/goals'||p.startsWith('/api/goals/')||p==='/api/transactions'||p.startsWith('/api/transactions/')||p==='/api/categories'||p==='/api/household') {
     const chunks = [];
     let size = 0;
     for await (const chunk of req) {
@@ -86,44 +85,21 @@ const server=http.createServer(async(req,res)=>{try{
     }
     const method = req.method || 'GET';
     const request = new Request(url, {method,headers:req.headers,...(!['GET','HEAD'].includes(method)?{body:Buffer.concat(chunks)}:{})});
-    const response = await apiApp.fetch(request, {...process.env,DB:sqliteBinding(db)});
+    const response = await apiApp.fetch(request, {...process.env,DB:sqliteBinding(db),REALTIME:'events'});
+    if (response.ok && !['GET','HEAD'].includes(method)) {
+      const user = sessionUser(req);
+      const household = user && householdFor(user.id, req.headers['x-household-id'] || url.searchParams.get('householdId'));
+      if (household) broadcast(household.id);
+    }
     res.writeHead(response.status, Object.fromEntries(response.headers));
     res.end(Buffer.from(await response.arrayBuffer()));
     return;
   }
-  if(req.method==='GET'&&p==='/api/snapshot'){const u=requireAuth(req,res);if(!u)return;const h=requireHouse(req,res,u,url);if(!h)return;const hid=h.id,members=db.prepare(`SELECT u.id,u.name,u.email,m.role FROM household_members m JOIN users u ON u.id=m.user_id WHERE m.household_id=? AND u.status='active' ORDER BY m.joined_at`).all(hid),categories=db.prepare(`SELECT id,name,pct,sort_order FROM categories WHERE household_id=? ORDER BY sort_order`).all(hid),transactions=db.prepare(`SELECT t.*,u.name AS created_by_name,c.name AS category_name,g.name AS goal_name FROM transactions t JOIN users u ON u.id=t.user_id LEFT JOIN categories c ON c.id=t.category_id LEFT JOIN goals g ON g.id=t.goal_id AND g.household_id=t.household_id WHERE t.household_id=? ORDER BY tx_date DESC,created_at DESC LIMIT 2000`).all(hid),goals=db.prepare(GOALS_SNAPSHOT_SQL).all(hid),monthlySummary=db.prepare(MONTHLY_SUMMARY_SQL).all(hid);return json(res,200,{household:{id:hid,name:h.name,role:h.role,monthly_limit:h.monthly_limit},members,categories,transactions,goals,monthlySummary})}
   if(req.method==='GET'&&p==='/api/events'){const u=requireAuth(req,res);if(!u)return;const h=requireHouse(req,res,u,url);if(!h)return;res.writeHead(200,{'Content-Type':'text/event-stream','Cache-Control':'no-cache','Connection':'keep-alive'});const cid=uid();clients.set(cid,{hid:h.id,res});res.write('event: ready\ndata: {}\n\n');const k=setInterval(()=>res.write(': ping\n\n'),25000);req.on('close',()=>{clearInterval(k);clients.delete(cid)});return}
-  if(req.method==='POST'&&p==='/api/transactions'){
-    const u=requireAuth(req,res);if(!u)return;const h=requireHouse(req,res,u,url);if(!h)return;
-    const b=await bodyJson(req),type=b.type,amount=b.amount,note=String(b.note||'').trim(),date=String(b.date||'');
-    if(!['income','expense'].includes(type)||!validMoney(amount,1)||!note||note.length>255||!validDate(date))return json(res,400,{error:'Transaksi tidak valid. Cek tanggal, nominal, dan catatan.'});
-    const categoryId=type==='income'?null:String(b.categoryId||'').trim()||null;
-    if(categoryId&&!db.prepare('SELECT id FROM categories WHERE id=? AND household_id=?').get(categoryId,h.id))return json(res,400,{error:'Kategori tidak valid'});
-    if(b.goalId!=null&&typeof b.goalId!=='string')return json(res,400,{error:'Goal tidak valid'});
-    let goalId=typeof b.goalId==='string'?b.goalId.trim()||null:null;
-    if(type==='income'&&goalId)return json(res,400,{error:'Goal hanya untuk setoran tabungan melalui pengeluaran'});
-    if(type==='expense'&&b.goalId===undefined&&categoryId)goalId=db.prepare(GOAL_FOR_CATEGORY_SQL).get(categoryId,h.id)?.id||null;
-    if(goalId&&!db.prepare('SELECT id FROM goals WHERE id=? AND household_id=?').get(goalId,h.id))return json(res,400,{error:'Goal tidak valid'});
-    const id=uid();
-    db.prepare('INSERT INTO transactions(id,household_id,user_id,type,amount,note,category_id,goal_id,tx_date,need,source,paid_by,receipt_url,external_ref,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(id,h.id,u.id,type,amount,note,categoryId,goalId,date,type==='income'?0:(b.need?1:0),String(b.source||'manual'),String(b.paidBy||'shared'),b.receiptUrl||null,b.externalRef||null,now());
-    broadcast(h.id);return json(res,200,{ok:true,id});
-  }
-  const del=p.match(/^\/api\/transactions\/([^/]+)$/);if(req.method==='DELETE'&&del){const u=requireAuth(req,res);if(!u)return;const h=requireHouse(req,res,u,url);if(!h)return;const r=db.prepare(`DELETE FROM transactions WHERE id=? AND household_id=?`).run(decodeURIComponent(del[1]),h.id);if(!r.changes)return json(res,404,{error:'Transaksi tidak ditemukan'});broadcast(h.id);return json(res,200,{ok:true})}
-  if(req.method==='PUT'&&p==='/api/categories'){const u=requireAuth(req,res);if(!u)return;const h=requireHouse(req,res,u,url);if(!h)return;const b=await bodyJson(req),rows=Array.isArray(b.categories)?b.categories:[],st=db.prepare(`UPDATE categories SET name=?,pct=?,sort_order=? WHERE id=? AND household_id=?`);db.exec('BEGIN');try{rows.forEach((c,i)=>st.run(String(c.name||'').trim(),Number(c.pct||0),i,c.id,h.id));db.exec('COMMIT')}catch(e){db.exec('ROLLBACK');return json(res,400,{error:e.message})}broadcast(h.id);return json(res,200,{ok:true})}
-  if(req.method==='PUT'&&p==='/api/goals'){
-    const u=requireAuth(req,res);if(!u)return;const h=requireHouse(req,res,u,url);if(!h)return;
-    const b=await bodyJson(req),rows=Array.isArray(b.goals)?b.goals:[];
-    if(!rows.length||rows.length>50||rows.some(g=>!g||typeof g.id!=='string'||typeof g.name!=='string'||!g.name.trim()||g.name.length>60||!validMoney(g.target)||(g.initial_balance!==undefined&&!validMoney(g.initial_balance))||(g.target_date&&!validDate(g.target_date))))return json(res,400,{error:'Goals tidak valid. Isi target dan saldo awal dengan nominal bulat non-negatif.'});
-    if(new Set(rows.map(g=>g.id)).size!==rows.length||rows.some(g=>!db.prepare('SELECT id FROM goals WHERE id=? AND household_id=?').get(g.id,h.id)))return json(res,400,{error:'Goal bukan milik household aktif / ID duplikat'});
-    const st=db.prepare('UPDATE goals SET name=?,target=?,current=COALESCE(?,current),target_date=?,sort_order=? WHERE id=? AND household_id=?');
-    db.exec('BEGIN');try{rows.forEach((g,i)=>st.run(g.name.trim(),g.target,g.initial_balance??null,g.target_date||null,i,g.id,h.id));db.exec('COMMIT')}catch(e){db.exec('ROLLBACK');return json(res,400,{error:e.message})}
-    broadcast(h.id);return json(res,200,{ok:true});
-  }
-  if(req.method==='PUT'&&p==='/api/household'){const u=requireAuth(req,res);if(!u)return;const h=requireHouse(req,res,u,url);if(!h)return;const b=await bodyJson(req),name=String(b.name||h.name).trim(),limit=Math.max(0,Math.round(Number(b.monthlyLimit??h.monthly_limit)));db.prepare(`UPDATE households SET name=?,monthly_limit=? WHERE id=?`).run(name,limit,h.id);broadcast(h.id);return json(res,200,{ok:true})}
   if(req.method==='POST'&&p==='/api/invites'){const u=requireAuth(req,res);if(!u)return;const h=requireHouse(req,res,u,url);if(!h)return;if(h.role!=='owner')return json(res,403,{error:'Hanya owner yang bisa membuat invite'});const t=token(18),exp=new Date(Date.now()+7*86400000).toISOString();db.prepare(`INSERT INTO invites(token,household_id,created_by,expires_at) VALUES(?,?,?,?)`).run(t,h.id,u.id,exp);return json(res,200,{token:t,expiresAt:exp,joinPath:`/?join=${encodeURIComponent(t)}`})}
   const join=p.match(/^\/api\/invites\/([^/]+)\/join$/);if(req.method==='POST'&&join){const u=requireAuth(req,res);if(!u)return;const t=decodeURIComponent(join[1]),inv=db.prepare(`SELECT * FROM invites WHERE token=?`).get(t);if(!inv||inv.used_by||new Date(inv.expires_at)<=new Date())return json(res,400,{error:'Invite tidak valid / sudah kedaluwarsa'});db.prepare(`INSERT OR IGNORE INTO household_members(household_id,user_id,role,joined_at) VALUES(?,?,?,?)`).run(inv.household_id,u.id,'member',now());db.prepare(`UPDATE invites SET used_by=? WHERE token=?`).run(u.id,t);broadcast(inv.household_id);return json(res,200,{ok:true,householdId:inv.household_id})}
   if(req.method==='POST'&&p==='/api/receipts'){const u=requireAuth(req,res);if(!u)return;const h=requireHouse(req,res,u,url);if(!h)return;const b=await bodyJson(req),m=String(b.dataUrl||'').match(/^data:(image\/(?:png|jpeg|webp));base64,(.+)$/);if(!m)return json(res,400,{error:'Format gambar tidak didukung'});const buf=Buffer.from(m[2],'base64');if(buf.length>8*1024*1024)return json(res,413,{error:'Maksimum ukuran nota 8MB'});const ext=m[1].includes('png')?'png':m[1].includes('webp')?'webp':'jpg',fn=`${h.id}-${Date.now()}-${token(6)}.${ext}`;fs.writeFileSync(path.join(UPLOAD_DIR,fn),buf);return json(res,200,{ok:true,url:`/receipts/${fn}`})}
-  if(p.startsWith('/receipts/')){const file=path.resolve(UPLOAD_DIR,path.basename(p));if(staticFile(res,file))return}
+  if(p.startsWith('/receipts/')){const u=requireAuth(req,res);if(!u)return;const h=requireHouse(req,res,u,url);if(!h)return;const filename=path.basename(p);if(!filename.startsWith(`${h.id}-`))return json(res,404,{error:'Nota tidak ditemukan'});const file=path.resolve(UPLOAD_DIR,filename);res.setHeader('Cache-Control','private, no-store');if(staticFile(res,file))return;return json(res,404,{error:'Nota tidak ditemukan'})}
   if(req.method==='GET'){let rel=p==='/'?'index.html':p.replace(/^\//,'');if(rel.includes('..'))return send(res,400,'Bad path');const file=path.join(PUBLIC_DIR,rel);if(staticFile(res,file))return;if(staticFile(res,path.join(PUBLIC_DIR,'index.html')))return}
   return json(res,404,{error:'Not found'});
 }catch(e){console.error(e);if(!res.headersSent)return json(res,500,{error:e.message});res.end()}});

@@ -19,25 +19,27 @@
   <div id="shell" class="app-shell hidden">
     <aside id="sidebar" class="sidebar">
       <div class="brand"><img src="/favicon.svg" alt="" class="brand-mark"><div><b>BudgetKu</b><small>Family money tracker</small></div></div>
-      <nav>
+      <nav aria-label="Navigasi utama">
         <button data-view="dashboard" class="nav active"><span class="nav-icon">⌂</span><span>Dashboard</span></button>
         <button data-view="transactions" class="nav"><span class="nav-icon">↕</span><span>Transaksi</span></button>
-        <button data-view="budget" class="nav"><span class="nav-icon">◫</span><span>Auto Budget</span></button>
+        <button data-view="budget" class="nav"><span class="nav-icon">◫</span><span><span class="nav-desktop-label">Auto </span>Budget</span></button>
         <button data-view="goals" class="nav"><span class="nav-icon">◎</span><span>Goals</span></button>
-        <button data-view="receipts" class="nav"><span class="nav-icon">▤</span><span>Nota & Gmail</span></button>
-        <button data-view="family" class="nav"><span class="nav-icon">♧</span><span>Family</span></button>
-        <button data-view="users" class="nav admin-only hidden"><span class="nav-icon">♙</span><span>Kelola User</span></button>
-        <button data-view="settings" class="nav"><span class="nav-icon">⚙</span><span>Settings</span></button>
+        <button type="button" class="nav-more" aria-label="Buka menu lainnya" aria-haspopup="dialog" aria-controls="moreDialog" aria-expanded="false"><span class="nav-icon"></span><span>Lainnya</span></button>
+        <button data-view="receipts" class="nav nav-secondary"><span class="nav-icon">▤</span><span>Nota & Gmail</span></button>
+        <button data-view="family" class="nav nav-secondary"><span class="nav-icon">♧</span><span>Family</span></button>
+        <button data-view="users" class="nav admin-only nav-secondary hidden"><span class="nav-icon">♙</span><span>Kelola User</span></button>
+        <button data-view="settings" class="nav nav-secondary"><span class="nav-icon">⚙</span><span>Settings</span></button>
       </nav>
       <div class="side-note" id="userMini"></div>
     </aside>
-    <button id="sidebarBackdrop" class="sidebar-backdrop" aria-label="Tutup navigasi" tabindex="-1"></button>
 
     <main>
-      <header class="topbar">
-        <button id="toggleSidebar" class="icon-btn" aria-label="Buka navigasi" aria-controls="sidebar" aria-expanded="false">☰</button>
-        <div class="topbar-title-group">
-          <h1 id="pageTitle">Dashboard</h1>
+      <div id="pageTools" class="page-tools">
+        <div class="page-tools-title">
+          <span class="page-tools-kicker">BUDGETKU FAMILY</span>
+          <h1 id="pageTitle" tabindex="-1">Dashboard</h1>
+        </div>
+        <div class="page-tools-actions">
           <div id="monthControl" class="month-control">
             <button id="monthPickerBtn" class="month-picker-btn" type="button" aria-label="Pilih bulan" aria-controls="monthNavigator" aria-expanded="false"><span id="compactMonthLabel"></span><span class="month-picker-chevron" aria-hidden="true"></span></button>
             <div id="monthNavigator" class="month-navigator" role="group" aria-label="Navigasi bulan">
@@ -47,12 +49,28 @@
               <button id="currentMonthBtn" class="month-nav-reset" type="button" aria-label="Kembali ke bulan ini" title="Kembali ke bulan ini" hidden></button>
             </div>
           </div>
+          <button id="quickAdd" class="primary icon-label" aria-label="Catat transaksi"><span class="button-icon">＋</span><span class="hide-compact">Transaksi</span></button>
         </div>
-        <button id="quickAdd" class="primary icon-label"><span class="button-icon">＋</span><span class="hide-compact">Transaksi</span></button>
-      </header>
+      </div>
       <section id="app"></section>
     </main>
   </div>
+
+  <dialog id="moreDialog" class="more-dialog" aria-labelledby="moreDialogTitle">
+    <div class="more-sheet">
+      <div class="more-sheet-head">
+        <div><span class="page-tools-kicker">RUANG KERJA</span><h2 id="moreDialogTitle">Menu lainnya</h2></div>
+        <button type="button" class="icon-btn more-close" aria-label="Tutup menu" title="Tutup menu" data-icon="close"></button>
+      </div>
+      <nav class="more-nav-list" aria-label="Menu lainnya">
+        <button data-view="receipts" class="nav more-nav"><span class="nav-icon"></span><span>Nota & Gmail</span></button>
+        <button data-view="family" class="nav more-nav"><span class="nav-icon"></span><span>Family</span></button>
+        <button data-view="users" class="nav admin-only more-nav hidden"><span class="nav-icon"></span><span>Kelola User</span></button>
+        <button data-view="settings" class="nav more-nav"><span class="nav-icon"></span><span>Settings</span></button>
+      </nav>
+      <div class="more-account" id="moreUser"></div>
+    </div>
+  </dialog>
 
   <dialog id="txDialog" aria-labelledby="txDialogTitle">
     <form method="dialog" id="txForm" class="dialog-card form-stack" novalidate>
@@ -82,8 +100,9 @@
       <div class="form-footer">
         <p class="form-message muted" role="status" aria-live="polite"></p>
         <div class="actions">
+          <button id="txDeleteBtn" type="button" class="danger" hidden>Hapus</button>
           <button type="button" data-dialog-close class="secondary">Batal</button>
-          <button class="primary" type="submit" value="default"><span data-icon="check"></span><span>Simpan transaksi</span></button>
+          <button id="txSubmitBtn" class="primary" type="submit" value="default"><span data-icon="check"></span><span id="txSubmitLabel">Simpan transaksi</span></button>
         </div>
       </div>
     </form>

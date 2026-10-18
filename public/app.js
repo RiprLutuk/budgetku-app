@@ -4,7 +4,7 @@ import { localDateValue } from "./forms.js";
 import { renderGoals as renderGoalsView } from "./views/goals.js";
 import { renderSettings as renderSettingsView } from "./views/settings.js";
 import { createTransactionDialog } from "./components/transaction-dialog.js";
-import { summarizeCashflow } from "./cashflow.js";
+import { financialHealth, summarizeCashflow } from "./cashflow.js";
 import { renderDashboard as renderDashboardView, renderTransactions as renderTransactionsView } from "./views/dashboard.js";
 
 let me = null,
@@ -24,7 +24,9 @@ const app = document.querySelector("#app"),
   shell = document.querySelector("#shell"),
   pageTitle = document.querySelector("#pageTitle");
 const monthControl = document.querySelector("#monthControl"),
-  monthPicker = document.querySelector("#monthPickerBtn");
+  monthPicker = document.querySelector("#monthPickerBtn"),
+  moreDialog = document.querySelector("#moreDialog"),
+  moreButton = document.querySelector(".nav-more");
 const rupiah = (n) =>
   new Intl.NumberFormat("id-ID", {
     style: "currency",
@@ -119,7 +121,7 @@ function renderAuth() {
 async function refreshSnapshot(background = false) {
   const householdId = activeHouseholdId;
   const requestId = ++snapshotRequestId;
-  const next = await api("/api/snapshot");
+  const next = await api(`/api/snapshot?month=${encodeURIComponent(currentMonth)}`);
   if (householdId !== activeHouseholdId || requestId !== snapshotRequestId) return;
   snapshot = next;
   if (background && isEditing()) return;
@@ -177,6 +179,7 @@ function shiftMonth(offset) {
   followingCurrentMonth = currentMonth === localDateValue().slice(0, 7);
   renderChrome();
   render();
+  refreshSnapshot().catch((error) => toast(error.message));
 }
 function resetMonth() {
   followingCurrentMonth = true;
@@ -201,21 +204,35 @@ function renderChrome() {
   document.querySelectorAll(".admin-only").forEach((el) => {
     el.classList.toggle("hidden", !me.user.is_superadmin);
   });
-  document.querySelector("#userMini").innerHTML =
-    `<div class="side-user-meta"><b>${esc(me.user.name)}</b><span class="small muted">${esc(me.user.email)}</span>${me.user.is_superadmin ? `<span class="pill badge-admin" style="margin-top:2px;width:max-content">Superadmin</span>` : ""}</div><button id="logoutBtn" class="secondary" style="margin-top:8px;width:100%"><span class="button-icon">${icon("logout")}</span><span>Keluar</span></button>`;
-  document.querySelector("#logoutBtn").onclick = async () => {
-    await api("/api/auth/logout", { method: "POST" });
-    location.reload();
-  };
+  const account = `<div class="side-user-meta"><b>${esc(me.user.name)}</b><span class="small muted">${esc(me.user.email)}</span>${me.user.is_superadmin ? '<span class="pill badge-admin">Superadmin</span>' : ""}</div><button type="button" data-logout class="account-logout" aria-label="Keluar dari akun" title="Keluar">${icon("logout")}</button>`;
+  document.querySelector("#userMini").innerHTML = account;
+  document.querySelector("#moreUser").innerHTML = account;
+  document.querySelectorAll("[data-logout]").forEach((button) => {
+    button.onclick = async () => {
+      button.disabled = true;
+      try {
+        await api("/api/auth/logout", { method: "POST" });
+        location.reload();
+      } catch (error) {
+        button.disabled = false;
+        toast(error.message);
+      }
+    };
+  });
 }
 const monthTx = () => snapshot.transactions.filter((transaction) => transaction.tx_date.slice(0, 7) === currentMonth);
 const monthCashflow = () => summarizeCashflow(snapshot.monthlySummary, currentMonth, snapshot.transactions);
 function render() {
   document
     .querySelectorAll(".nav")
-    .forEach((n) =>
-      n.classList.toggle("active", n.dataset.view === currentView),
-    );
+    .forEach((button) => {
+      const active = button.dataset.view === currentView;
+      button.classList.toggle("active", active);
+      if (active) button.setAttribute("aria-current", "page");
+      else button.removeAttribute("aria-current");
+    });
+  moreButton.classList.toggle("active", ["receipts", "family", "users", "settings"].includes(currentView));
+  monthControl.hidden = !["dashboard", "transactions", "budget"].includes(currentView);
   pageTitle.textContent = {
     dashboard: "Dashboard",
     transactions: "Transaksi",
@@ -241,7 +258,8 @@ function insightItems(summary = monthCashflow()) {
     need = summary.needsExpense,
     spending = exp - summary.goalSavings,
     wants = Math.max(0, spending - need),
-    saveAmt = inc - spending,
+    saveAmt = summary.goalSavings,
+    health = financialHealth(summary, snapshot.monthlySummary, currentMonth),
     out = [];
   if (exp > snapshot.household.monthly_limit)
     out.push({
@@ -256,7 +274,22 @@ function insightItems(summary = monthCashflow()) {
   if (inc > 0 && saveAmt / inc < 0.2)
     out.push({
       kind: "warn",
-      text: `Saving rate bulan ini ${Math.max(0, pct(saveAmt, inc))}%. Coba lindungi alokasi goals sebelum lifestyle bertambah.`,
+      text: `Setoran goals baru ${Math.max(0, pct(saveAmt, inc))}% dari pemasukan. Lindungi alokasi tabungan sebelum lifestyle bertambah.`,
+    });
+  if (inc > 0 && health.allocation.needs > 50)
+    out.push({
+      kind: "bad",
+      text: `Kebutuhan menyerap ${health.allocation.needs}% pemasukan, di atas benchmark 50%. Cari pos tetap yang bisa dinegosiasi atau diturunkan.`,
+    });
+  if (inc > 0 && health.allocation.wants > 30)
+    out.push({
+      kind: "warn",
+      text: `Keinginan mengambil ${health.allocation.wants}% pemasukan, di atas benchmark 30%. Jadikan ini area pertama untuk dikendalikan.`,
+    });
+  if (health.runway.tone === "bad")
+    out.push({
+      kind: "warn",
+      text: `Ketahanan kas baru sekitar ${health.runway.months.toFixed(1)} bulan kebutuhan. Prioritaskan buffer sebelum menambah komitmen baru.`,
     });
   if (spending > 0 && wants / spending > 0.2)
     out.push({
@@ -287,10 +320,11 @@ function insightItems(summary = monthCashflow()) {
 }
 function renderDashboard() {
   const monthName = new Intl.DateTimeFormat("id-ID", { month: "long", year: "numeric" }).format(new Date(`${currentMonth}-01T00:00:00`));
-  renderDashboardView(app, { snapshot, currentMonth, summary: monthCashflow(), monthName, rupiah, insightItems: insightItems(), onBind: bindCommon });
+  const summary = monthCashflow();
+  renderDashboardView(app, { snapshot, currentMonth, summary, health: financialHealth(summary, snapshot.monthlySummary, currentMonth), monthName, rupiah, insightItems: insightItems(summary), onBind: bindCommon });
 }
 function renderTransactions() {
-  renderTransactionsView(app, { snapshot, rupiah, onBind: bindCommon });
+  renderTransactionsView(app, { snapshot, currentMonth, rupiah, onBind: bindCommon });
 }
 function renderBudget() {
   const inc = monthCashflow().income;
@@ -331,6 +365,7 @@ function renderBudget() {
 function renderGoals() {
   renderGoalsView(app, {
     snapshot,
+    currentMonth,
     rupiah,
     pct,
     api,
@@ -603,17 +638,31 @@ function renderSettings() {
 }
 function openTx(prefill = {}) {
   const today = localDateValue();
-  txDialog?.open({ date: followingCurrentMonth || currentMonth === today.slice(0, 7) ? today : `${currentMonth}-01`, ...prefill });
+  const date = prefill.date || prefill.tx_date || (followingCurrentMonth || currentMonth === today.slice(0, 7) ? today : `${currentMonth}-01`);
+  txDialog?.open({ ...prefill, date });
 }
 function bindCommon() {
   document.querySelector("#addTx2")?.addEventListener("click", () => openTx());
   document.querySelectorAll("[data-go]").forEach(
     (b) =>
       (b.onclick = () => {
-        currentView = b.dataset.go;
-        render();
+        navigate(b.dataset.go);
       }),
   );
+  document.querySelectorAll(".edit-tx").forEach((el) => {
+    el.onclick = () => {
+      const tx = snapshot.transactions.find((item) => item.id === el.dataset.id);
+      if (tx) openTx(tx);
+    };
+  });
+  document.querySelectorAll("[data-quick-goal]").forEach((el) => {
+    el.onclick = () => {
+      navigate("goals");
+      setTimeout(() => {
+        document.querySelector("#addGoal")?.click();
+      }, 60);
+    };
+  });
   document.querySelectorAll(".delete-tx").forEach(
     (b) =>
       (b.onclick = async () => {
@@ -627,23 +676,37 @@ function bindCommon() {
       }),
   );
 }
-document.querySelectorAll(".nav").forEach(
-  (b) =>
-    (b.onclick = () => {
-      currentView = b.dataset.view;
-      setSidebarOpen(false);
-      render();
-    }),
-);
-function setSidebarOpen(open) {
-  if (open) setMonthPickerOpen(false);
-  document.querySelector("#sidebar").classList.toggle("open", open);
-  document.body.classList.toggle("nav-open", open);
-  document.querySelector("#toggleSidebar").setAttribute("aria-expanded", String(open));
+function navigate(view) {
+  const fromMenu = moreDialog.open;
+  currentView = view;
+  setMonthPickerOpen(false);
+  setMoreOpen(false);
+  render();
+  window.scrollTo({ top: 0, behavior: "instant" });
+  if (fromMenu) pageTitle.focus({ preventScroll: true });
 }
-document.querySelector("#toggleSidebar").onclick = () =>
-  setSidebarOpen(!document.querySelector("#sidebar").classList.contains("open"));
-document.querySelector("#sidebarBackdrop").onclick = () => setSidebarOpen(false);
+document.querySelectorAll(".nav").forEach((button) => {
+  button.onclick = () => navigate(button.dataset.view);
+});
+function setMoreOpen(open) {
+  if (open) {
+    setMonthPickerOpen(false);
+    closeSelects();
+    if (!moreDialog.open) moreDialog.showModal();
+    document.body.classList.add("menu-open");
+    moreButton.setAttribute("aria-expanded", "true");
+  } else if (moreDialog.open) moreDialog.close();
+}
+moreButton.onclick = () => setMoreOpen(true);
+moreDialog.querySelector(".more-close").onclick = () => setMoreOpen(false);
+moreDialog.querySelector(".more-close").innerHTML = icon("close");
+moreDialog.addEventListener("click", (event) => {
+  if (!event.target.closest(".more-sheet")) setMoreOpen(false);
+});
+moreDialog.addEventListener("close", () => {
+  document.body.classList.remove("menu-open");
+  moreButton.setAttribute("aria-expanded", "false");
+});
 function setMonthPickerOpen(open) {
   monthControl.classList.toggle("open", open);
   monthPicker.setAttribute("aria-expanded", String(open));
@@ -656,7 +719,10 @@ document.addEventListener("pointerdown", (event) => {
 monthControl.addEventListener("focusout", (event) => {
   if (!monthControl.contains(event.relatedTarget)) setMonthPickerOpen(false);
 });
-window.matchMedia("(max-width: 760px)").addEventListener("change", () => setMonthPickerOpen(false));
+window.matchMedia("(max-width: 760px)").addEventListener("change", () => {
+  setMonthPickerOpen(false);
+  setMoreOpen(false);
+});
 document.querySelector("#prevMonthBtn").innerHTML = icon("chevronLeft");
 document.querySelector("#nextMonthBtn").innerHTML = icon("chevronRight");
 document.querySelector("#currentMonthBtn").innerHTML = `${icon("today")}<span class="month-reset-label">Bulan ini</span>`;
@@ -670,7 +736,7 @@ document.querySelector("#currentMonthBtn").onclick = () => {
 };
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
-    setSidebarOpen(false);
+    setMoreOpen(false);
     if (monthPicker.getAttribute("aria-expanded") === "true") {
       setMonthPickerOpen(false);
       monthPicker.focus();
@@ -688,7 +754,7 @@ const navigationIcons = { dashboard: "overview", transactions: "ledger", budget:
 document.querySelectorAll(".nav").forEach((button) => {
   button.querySelector(".nav-icon").innerHTML = icon(navigationIcons[button.dataset.view]);
 });
-document.querySelector("#toggleSidebar").innerHTML = icon("menu");
+moreButton.querySelector(".nav-icon").innerHTML = icon("more");
 document.querySelector("#quickAdd").innerHTML = icon("plus");
 document.querySelector("#quickAdd").title = "Catat transaksi";
 document.querySelector("#quickAdd").setAttribute("aria-label", "Catat transaksi");
@@ -696,9 +762,14 @@ document.querySelector("#quickAdd").classList.add("quick-add");
 txDialog = createTransactionDialog({
   dialog: document.querySelector("#txDialog"),
   getSnapshot: () => snapshot,
-  save: (payload) => api("/api/transactions", { method: "POST", body: JSON.stringify(payload) }),
-  onSaved: async () => {
-    toast("Transaksi tersimpan");
+  save: (payload, id) => api(id ? `/api/transactions/${encodeURIComponent(id)}` : "/api/transactions", { method: id ? "PUT" : "POST", body: JSON.stringify(payload) }),
+  onDelete: async (id) => {
+    await api(`/api/transactions/${encodeURIComponent(id)}`, { method: "DELETE" });
+    toast("Transaksi dihapus");
+    await refreshSnapshot().catch(() => {});
+  },
+  onSaved: async (id) => {
+    toast(id ? "Koreksi tersimpan" : "Transaksi tersimpan");
     await refreshSnapshot().catch(() => {});
   },
 });

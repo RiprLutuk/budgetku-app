@@ -8,7 +8,7 @@
     "start": "node server.js",
     "dev:local": "node --watch server.js",
     "dev:worker": "wrangler dev",
-    "check": "node --check server.js && node --check api/index.js && node --check lib/admin.js && node --check lib/oauth.js && node --check lib/db.js && node --check lib/goals.js && node --check lib/transactions.js && node --check public/app.js && node --check public/cashflow.js && node --check public/money.js && node --check public/forms.js && node --check public/ui.js && node --check public/views/dashboard.js && node --check public/views/goals.js && node --check public/views/settings.js && node --check public/components/transaction-dialog.js && node --check public/sw.js",
+    "check": "node --check server.js && node --check api/index.js && node --check lib/admin.js && node --check lib/oauth.js && node --check lib/db.js && node --check lib/goals.js && node --check lib/transactions.js && node --check public/app.js && node --check public/cashflow.js && node --check public/goal-math.js && node --check public/money.js && node --check public/forms.js && node --check public/ui.js && node --check public/views/dashboard.js && node --check public/views/goals.js && node --check public/views/settings.js && node --check public/components/transaction-dialog.js && node --check public/sw.js",
     "db:migrate:local": "wrangler d1 migrations apply budgetku --local",
     "db:migrate:remote": "wrangler d1 migrations apply budgetku --remote",
     "deploy:check": "wrangler deploy --dry-run --outdir .worker-build",

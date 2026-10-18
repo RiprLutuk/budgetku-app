@@ -66,6 +66,18 @@ npm run check
 npm run deploy:check
 ```
 
+### Auto Deploy Dari GitHub
+
+`.github/workflows/deploy.yml` menjalankan validasi dan deploy otomatis setiap push ke
+`main` atau saat dijalankan manual dari tab **Actions**. Tambahkan dua repository
+secrets di GitHub sebelum mengaktifkannya:
+
+- `CLOUDFLARE_API_TOKEN`: API token Cloudflare untuk deploy Workers dan akses D1.
+- `CLOUDFLARE_ACCOUNT_ID`: Account ID Cloudflare yang memiliki Worker `budgetku`.
+
+Jangan menaruh token di repository, `.env`, atau `wrangler.jsonc`. Workflow hanya
+mengirim aset dari `public/` dan kode Worker; database lokal tetap dikecualikan.
+
 Endpoint `/health` mengembalikan status Worker. `/api/*` dan `/auth/*` selalu diproses Worker, bukan fallback HTML. Database diakses melalui binding per-request, tanpa koneksi global atau file SQLite di Worker.
 
 ## Kolaborasi

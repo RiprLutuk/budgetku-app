@@ -1,4 +1,4 @@
-const CACHE = 'budgetku-family-v16-compact-toolbar';
+const CACHE = 'budgetku-family-v19-bottom-navigation';
 const ASSETS = [
   '/',
   '/index.html',
@@ -6,6 +6,7 @@ const ASSETS = [
   '/app.js',
   '/forms.js',
   '/cashflow.js',
+  '/goal-math.js',
   '/components/transaction-dialog.js',
   '/views/dashboard.js',
   '/views/goals.js',
