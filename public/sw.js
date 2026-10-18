@@ -1,4 +1,4 @@
-const CACHE = 'budgetku-family-v20-compact-forms';
+const CACHE = 'budgetku-family-v22-light-login';
 const ASSETS = [
   '/',
   '/index.html',

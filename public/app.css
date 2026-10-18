@@ -76,9 +76,9 @@
   --shadow: 0 10px 30px rgba(16, 43, 55, 0.07);
   --shadow-lg: 0 24px 70px rgba(16, 43, 55, 0.14);
   --font-data: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-  --control-height: 34px;
-  --control-font-size: 13px;
-  --control-radius: 8px;
+  --control-height: 32px;
+  --control-font-size: 12px;
+  --control-radius: 7px;
 }
 
 * { box-sizing: border-box; }
@@ -780,7 +780,7 @@ input, select, textarea {
   width: 100%;
   border: 1px solid var(--border);
   border-radius: var(--control-radius);
-  padding: 6px 9px;
+  padding: 5px 8px;
   font-size: var(--control-font-size);
   font-weight: 400;
   line-height: 1.25;
@@ -810,7 +810,7 @@ input[type="radio"] {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 32px;
+  min-height: 30px;
   color: var(--dark);
   font-size: 12px;
 }
@@ -860,7 +860,7 @@ dialog::backdrop {
   padding: 16px;
   box-shadow: none;
   display: grid;
-  gap: 8px;
+  gap: 7px;
   position: relative;
 }
 .dialog-card[aria-busy="true"] {
@@ -944,37 +944,112 @@ dialog::backdrop {
 /* Auth Screen (Login Only) */
 .auth-screen {
   min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
   place-items: center;
-  padding: 16px;
+  padding: 24px 16px;
   background-color: var(--bg);
-  background-image: linear-gradient(rgba(19, 40, 51, 0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(19, 40, 51, 0.025) 1px, transparent 1px);
-  background-size: 32px 32px;
+  background-image: linear-gradient(rgba(19, 40, 51, 0.018) 1px, transparent 1px), linear-gradient(90deg, rgba(19, 40, 51, 0.018) 1px, transparent 1px);
+  background-size: 48px 48px;
 }
 .auth-card {
-  width: min(100%, 380px);
+  width: min(100%, 352px);
+  min-width: 0;
   background: #fff;
-  padding: 24px;
-  border-radius: var(--radius-lg);
+  padding: 22px;
+  border-radius: var(--radius);
   border: 1px solid var(--border);
-  box-shadow: var(--shadow-lg);
-}
-.auth-card h1 {
-  margin: 6px 0 2px;
-  font-size: 20px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-}
-.auth-card form {
-  display: grid;
-  gap: 11px;
-  margin-top: 16px;
+  box-shadow: 0 8px 28px rgba(16, 43, 55, 0.05);
+  font-weight: 400;
 }
 .auth-brand {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: 9px;
+  margin-bottom: 24px;
+}
+.auth-logo {
+  flex: 0 0 32px;
+  border-radius: 9px;
+}
+.auth-brand-copy {
+  display: grid;
+  gap: 1px;
+}
+.auth-brand-name {
+  color: var(--dark);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+.auth-brand-caption {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.4;
+}
+.auth-card h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+.auth-heading p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.auth-form {
+  display: grid;
+  gap: 12px;
+  margin-top: 20px;
+}
+.auth-form label {
+  gap: 5px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+.auth-form input {
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.25;
+}
+.auth-form input::placeholder {
+  color: var(--muted);
+  font-weight: 400;
+  opacity: 1;
+}
+.auth-form .auth-submit {
+  width: 100%;
+  min-height: var(--control-height);
+  margin-top: 2px;
+  padding: 6px 10px;
+  border-radius: var(--control-radius);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.25;
+  box-shadow: none;
+}
+.auth-submit .icon {
+  width: 16px;
+  height: 16px;
+}
+.auth-error {
+  margin: 0;
+  color: var(--bad);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+@supports (-webkit-touch-callout: none) {
+  .auth-form input {
+    font-size: 16px;
+  }
 }
 .hero-note {
   font-size: 12px;
@@ -1066,8 +1141,8 @@ dialog::backdrop {
 
 @media (max-width: 760px) {
   :root {
-    --control-height: 36px;
-    --control-font-size: 14px;
+    --control-height: 34px;
+    --control-font-size: 13px;
   }
   .app-shell { grid-template-columns: 1fr; }
   .hide-compact { display: none; }
@@ -1098,7 +1173,7 @@ dialog::backdrop {
   }
   .tx-row .hide-mobile { display: none; }
   .dialog-card {
-    padding: 14px;
+    padding: 12px;
     border-radius: var(--radius);
   }
   .dialog-card .form-footer {
@@ -1111,10 +1186,7 @@ dialog::backdrop {
     padding: 6px 10px;
   }
   .need-row .check {
-    min-height: 44px;
-  }
-  @supports (-webkit-touch-callout: none) {
-    :root { --control-font-size: 16px; }
+    min-height: 34px;
   }
   .toast {
     left: 12px;
@@ -1188,8 +1260,8 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 34px;
-  padding: 6px 9px;
+  min-height: 30px;
+  padding: 5px 8px;
   border-radius: 6px;
   font-size: var(--control-font-size);
   cursor: pointer;

@@ -1,6 +1,6 @@
 import { bindMoneyInputs, numericAmount } from "./money.js";
 import { closeSelects, icon } from "./ui.js";
-import { localDateValue } from "./forms.js";
+import { localDateValue, withPendingForm } from "./forms.js";
 import { renderGoals as renderGoalsView } from "./views/goals.js";
 import { renderSettings as renderSettingsView } from "./views/settings.js";
 import { createTransactionDialog } from "./components/transaction-dialog.js";
@@ -97,26 +97,57 @@ function showAuth() {
   renderAuth();
 }
 function renderAuth() {
-  authScreen.innerHTML = `<div class="auth-card"><div class="auth-brand"><img src="/favicon.svg" alt="" class="brand-mark" style="width:36px;height:36px"><div><b style="font-size:16px;color:#132833">BudgetKu</b><div class="kicker">Family money tracker</div></div></div><h1>Masuk ke Dashboard</h1><form id="loginForm"><label>Email<input name="email" type="email" autocomplete="username" placeholder="admin@budgetku.local" required></label><label>Password<input name="password" type="password" autocomplete="current-password" placeholder="••••••••" required></label><button type="submit" class="primary wide"><span class="button-icon">${icon("shield")}</span><span>Masuk</span></button></form><div id="authError" class="insight bad hidden" style="margin-top:12px"></div></div>`;
-  document
-    .querySelector("#loginForm")
-    ?.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const errBox = document.querySelector("#authError");
-      errBox.classList.add("hidden");
-      try {
-        await api("/api/auth/login", {
-          method: "POST",
-          body: JSON.stringify(
-            Object.fromEntries(new FormData(e.currentTarget)),
-          ),
-        });
-        await boot();
-      } catch (err) {
-        errBox.textContent = err.message;
-        errBox.classList.remove("hidden");
-      }
-    });
+  authScreen.innerHTML = `
+    <section class="auth-card" aria-labelledby="loginTitle">
+      <div class="auth-brand">
+        <img src="/favicon.svg" alt="" class="auth-logo" width="32" height="32">
+        <div class="auth-brand-copy">
+          <span class="auth-brand-name">BudgetKu</span>
+          <span class="auth-brand-caption">Family money tracker</span>
+        </div>
+      </div>
+      <header class="auth-heading">
+        <h1 id="loginTitle">Masuk ke akunmu</h1>
+        <p>Lanjutkan ke dashboard keuangan keluarga.</p>
+      </header>
+      <form id="loginForm" class="auth-form" aria-labelledby="loginTitle">
+        <label for="loginEmail">Email
+          <input id="loginEmail" name="email" type="email" inputmode="email" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="nama@email.com" required>
+        </label>
+        <label for="loginPassword">Password
+          <input id="loginPassword" name="password" type="password" autocomplete="current-password" placeholder="Masukkan password" required>
+        </label>
+        <p id="authError" class="auth-error" role="alert" hidden></p>
+        <button type="submit" class="primary auth-submit"><span class="auth-submit-label">Masuk</span>${icon("arrow")}</button>
+      </form>
+    </section>`;
+  const form = authScreen.querySelector("#loginForm");
+  const errorBox = form.querySelector("#authError");
+  const submitLabel = form.querySelector(".auth-submit-label");
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (form.getAttribute("aria-busy") === "true") return;
+    const credentials = Object.fromEntries(new FormData(form));
+    errorBox.hidden = true;
+    errorBox.textContent = "";
+    try {
+      await withPendingForm(form, async () => {
+        submitLabel.textContent = "Memproses...";
+        try {
+          await api("/api/auth/login", {
+            method: "POST",
+            body: JSON.stringify(credentials),
+          });
+          await boot();
+        } finally {
+          submitLabel.textContent = "Masuk";
+        }
+      });
+    } catch (error) {
+      errorBox.textContent = error.message;
+      errorBox.hidden = false;
+    }
+  });
 }
 async function refreshSnapshot(background = false) {
   const householdId = activeHouseholdId;
