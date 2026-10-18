@@ -1,4 +1,4 @@
-const CACHE = 'budgetku-family-v36-spending-classification-assets';
+const CACHE = 'budgetku-family-v37-asset-purchases-assets';
 const ASSETS = [
   '/',
   '/index.html',

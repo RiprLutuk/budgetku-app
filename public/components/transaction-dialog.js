@@ -79,10 +79,21 @@ export function createTransactionDialog({ dialog, getSnapshot, save, onDelete, o
     form.querySelector('.category-row').classList.toggle('hidden', income);
     transactionGrid.classList.toggle('is-income', income);
     form.querySelector('.need-row').classList.toggle('hidden', income || Boolean(goal.value));
+    form.querySelector('.asset-row').classList.toggle('hidden', income || Boolean(goal.value));
+    if (income || goal.value) fields.isAsset.checked = false;
+    syncAsset();
     category.setDisabled(income);
     goal.setDisabled(false);
     form.querySelector('#paidByLabel').textContent = income ? 'Diterima oleh' : 'Dibayar oleh';
     syncHint();
+  }
+  function syncAsset() {
+    const enabled = fields.isAsset.checked && fields.type.value === 'expense' && !goal.value;
+    const assetFields = form.querySelector('.asset-fields');
+    assetFields.hidden = !enabled;
+    fields.assetName.required = enabled;
+    fields.need.disabled = enabled;
+    if (enabled) fields.need.checked = false;
   }
   form.querySelectorAll('[data-type]').forEach((button) => {
     button.onclick = () => {
@@ -92,6 +103,7 @@ export function createTransactionDialog({ dialog, getSnapshot, save, onDelete, o
     };
   });
   form.querySelectorAll('[data-dialog-close]').forEach((button) => { button.onclick = () => dialog.close(); });
+  fields.isAsset.addEventListener('change', syncAsset);
   dialog.addEventListener('close', closeSelects);
 
   deleteBtn.onclick = async () => {
@@ -132,6 +144,7 @@ export function createTransactionDialog({ dialog, getSnapshot, save, onDelete, o
         goalId: goal.value || null,
         date: fields.date.value,
         need: !income && !goal.value && fields.need.checked,
+        asset: !income && !goal.value && fields.isAsset.checked ? { name: fields.assetName.value.trim(), type: fields.assetType.value } : null,
         paidBy: paidBy.value,
         source: fields.source.value,
         receiptUrl: fields.receiptUrl.value || null,
@@ -166,6 +179,9 @@ export function createTransactionDialog({ dialog, getSnapshot, save, onDelete, o
       fields.date.value = prefill.date || prefill.tx_date || localDateValue();
       fields.date.max = localDateValue();
       fields.need.checked = prefill.need !== undefined ? Boolean(prefill.need) : true;
+      fields.isAsset.checked = Boolean(prefill.asset_id);
+      fields.assetName.value = prefill.asset_name || '';
+      fields.isAsset.disabled = Boolean(editingId && prefill.asset_id);
       fields.source.value = prefill.source || 'manual';
       fields.receiptUrl.value = prefill.receiptUrl || prefill.receipt_url || '';
       fields.externalRef.value = prefill.externalRef || prefill.external_ref || (editingId ? '' : `manual:${crypto.randomUUID()}`);
@@ -173,7 +189,7 @@ export function createTransactionDialog({ dialog, getSnapshot, save, onDelete, o
         name: 'category', label: 'Kategori', inputId: 'txCategory',
         options: [{ value: '', label: 'Tanpa kategori' }, ...data.categories.map((item) => ({ value: item.id, label: item.name }))],
         value: prefill.categoryId ?? prefill.category_id ?? categoryForGoal(prefill.goalId ?? prefill.goal_id)?.id ?? data.categories[0]?.id ?? '',
-        onChange: syncGoal,
+        onChange: () => { syncGoal(); syncType(); },
       });
       goal = searchableSelect(form.querySelector('#goalSelect'), {
         name: 'goalId', label: 'Alokasi tabungan', inputId: 'txGoal', describedBy: 'goalHint',

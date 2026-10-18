@@ -27,6 +27,7 @@ export function summarizeCashflow(monthlySummary = [], month, transactions = [],
   let goalWithdrawals = 0;
   let expense = 0;
   let goalSavings = 0;
+  let assetExpense = 0;
   let needsExpense = 0;
   for (const summary of source) {
     const cashInflow = amount(summary.cash_inflow ?? amount(summary.income) + amount(summary.goal_withdrawals));
@@ -37,6 +38,7 @@ export function summarizeCashflow(monthlySummary = [], month, transactions = [],
       goalWithdrawals = amount(summary.goal_withdrawals);
       expense = amount(summary.expense);
       goalSavings = amount(summary.goal_savings);
+      assetExpense = amount(summary.asset_expense);
       needsExpense = amount(summary.needs_expense);
     }
   }
@@ -50,7 +52,8 @@ export function summarizeCashflow(monthlySummary = [], month, transactions = [],
     goalWithdrawals,
     cashInflow,
     expense,
-    spending: Math.max(0, expense - goalSavings),
+    assetExpense,
+    spending: Math.max(0, expense - goalSavings - assetExpense),
     goalSavings,
     netGoalSavings: goalSavings - goalWithdrawals,
     needsExpense,
@@ -68,16 +71,18 @@ export function financialHealth(summary = {}, monthlySummary = [], month, goals 
   const netGoalSavings = amount(summary.goalSavings) - amount(summary.goalWithdrawals);
   const savings = Math.max(0, netGoalSavings);
   const spending = Math.max(0, amount(summary.spending));
+  const assetPurchases = Math.max(0, amount(summary.assetExpense));
   const wants = Math.max(0, spending - needs);
   const allocationBasis = income;
   const retained = income - spending;
   const unallocated = Math.max(0, retained - savings);
-  const plannedOutflow = spending + savings;
+  const plannedOutflow = spending + savings + assetPurchases;
   const share = (value) => allocationBasis ? Math.round((value / allocationBasis) * 100) : 0;
   const allocation = {
     needs: share(needs),
     wants: share(wants),
     savings: share(savings),
+    assetPurchases: share(assetPurchases),
     unallocated: share(Math.max(0, unallocated)),
   };
   const thisMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
@@ -125,6 +130,7 @@ export function financialHealth(summary = {}, monthlySummary = [], month, goals 
     needs,
     wants,
     savings,
+    assetPurchases,
     allocationBasis,
     allocation,
     unallocated,
@@ -144,7 +150,7 @@ export function buildMonthlySummary(transactions = []) {
   for (const transaction of transactions) {
     const month = String(transaction.tx_date || '').slice(0, 7);
     if (!/^\d{4}-\d{2}$/.test(month)) continue;
-    const summary = byMonth.get(month) || { month, income: 0, goal_withdrawals: 0, cash_inflow: 0, expense: 0, goal_savings: 0, needs_expense: 0 };
+    const summary = byMonth.get(month) || { month, income: 0, goal_withdrawals: 0, cash_inflow: 0, expense: 0, goal_savings: 0, asset_expense: 0, needs_expense: 0 };
     if (transaction.type === 'income') {
       if (transaction.goal_id) summary.goal_withdrawals += amount(transaction.amount);
       else summary.income += amount(transaction.amount);
@@ -153,7 +159,8 @@ export function buildMonthlySummary(transactions = []) {
     if (transaction.type === 'expense') {
       summary.expense += amount(transaction.amount);
       if (transaction.goal_id) summary.goal_savings += amount(transaction.amount);
-      if (transaction.need && !transaction.goal_id) summary.needs_expense += amount(transaction.amount);
+      if (transaction.asset_id) summary.asset_expense += amount(transaction.amount);
+      if (transaction.need && !transaction.goal_id && !transaction.asset_id) summary.needs_expense += amount(transaction.amount);
     }
     byMonth.set(month, summary);
   }

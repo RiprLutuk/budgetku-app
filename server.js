@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY,user_id TEXT NOT NULL,ex
 CREATE TABLE IF NOT EXISTS categories(id TEXT PRIMARY KEY,household_id TEXT NOT NULL,name TEXT NOT NULL,pct REAL NOT NULL,sort_order INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS transactions(id TEXT PRIMARY KEY,household_id TEXT NOT NULL,user_id TEXT NOT NULL,type TEXT NOT NULL,amount INTEGER NOT NULL,note TEXT NOT NULL,category_id TEXT,goal_id TEXT,tx_date TEXT NOT NULL,need INTEGER NOT NULL DEFAULT 1,source TEXT NOT NULL DEFAULT 'manual',paid_by TEXT NOT NULL DEFAULT 'shared',receipt_url TEXT,external_ref TEXT,created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS goals(id TEXT PRIMARY KEY,household_id TEXT NOT NULL,name TEXT NOT NULL,target INTEGER NOT NULL DEFAULT 0,current INTEGER NOT NULL DEFAULT 0,target_date TEXT,sort_order INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS assets(id TEXT PRIMARY KEY,household_id TEXT NOT NULL,name TEXT NOT NULL,asset_type TEXT NOT NULL DEFAULT 'household',acquisition_cost INTEGER NOT NULL CHECK(acquisition_cost>0),current_value INTEGER NOT NULL CHECK(current_value>=0),acquired_at TEXT NOT NULL,disposed_at TEXT,created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS invites(token TEXT PRIMARY KEY,household_id TEXT NOT NULL,created_by TEXT NOT NULL,expires_at TEXT NOT NULL,used_by TEXT);
 CREATE TABLE IF NOT EXISTS oauth_states(state TEXT PRIMARY KEY,user_id TEXT NOT NULL,expires_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS gmail_tokens(user_id TEXT PRIMARY KEY,token_json TEXT NOT NULL,updated_at TEXT NOT NULL);
@@ -48,12 +49,14 @@ try {
     ['households', 'cash_opening_balance', 'INTEGER NOT NULL DEFAULT 0 CHECK(cash_opening_balance>=0)'],
     ['households', 'cash_opening_date', 'TEXT'],
     ['transactions', 'version', 'INTEGER NOT NULL DEFAULT 0'],
+    ['transactions', 'asset_id', 'TEXT'],
   ]) {
     if (!db.prepare(`PRAGMA table_info(${table})`).all().some((item) => item.name === column)) {
       db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
     }
   }
   db.exec(fs.readFileSync(path.join(__dirname, 'migrations/0003_financial_integrity.sql'), 'utf8').replace(/^ALTER TABLE[^\n]+/gm, ''));
+  db.exec('CREATE INDEX IF NOT EXISTS idx_assets_household_active ON assets(household_id,disposed_at,acquired_at); CREATE INDEX IF NOT EXISTS idx_transactions_asset ON transactions(household_id,asset_id,tx_date);');
   if (!db.prepare("SELECT value FROM app_settings WHERE key='auto_budget_revision_0004'").get()) {
     db.exec(fs.readFileSync(path.join(__dirname, 'migrations/0004_realistic_auto_budget.sql'), 'utf8'));
     db.prepare("INSERT INTO app_settings(key,value) VALUES('auto_budget_revision_0004',?)").run(new Date().toISOString());

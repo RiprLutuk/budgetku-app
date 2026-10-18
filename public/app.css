@@ -2322,6 +2322,7 @@ button:active {
 .ledger-glyph.is-inflow { color: #287f92; background: #e1f0ee; }
 .ledger-glyph.is-outflow { color: #b95755; background: #fff0ed; }
 .ledger-glyph.is-goal { color: #906a2b; background: #f5ead2; }
+.ledger-glyph.is-asset { color: #516ca1; background: #e8edf8; }
 .ledger-copy {
   min-width: 0;
 }
@@ -2522,6 +2523,7 @@ button:active {
 .allocation-segment.needs { background: #3b7b8a; }
 .allocation-segment.wants { background: #dfa85f; }
 .allocation-segment.savings { background: #4ca38b; }
+.allocation-segment.assets { background: #7184b2; }
 .allocation-segment.unallocated { background: #cfd8d5; }
 
 .allocation-legend {
@@ -2546,6 +2548,7 @@ button:active {
 .allocation-dot.needs { background: #3b7b8a; }
 .allocation-dot.wants { background: #dfa85f; }
 .allocation-dot.savings { background: #4ca38b; }
+.allocation-dot.assets { background: #7184b2; }
 .allocation-dot.unallocated { background: #cfd8d5; }
 .allocation-item strong {
   display: block;

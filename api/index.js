@@ -301,12 +301,13 @@ app.get("/api/snapshot", async (c) => {
   const monthEnd = new Date(`${month}-01T00:00:00Z`);
   monthEnd.setUTCMonth(monthEnd.getUTCMonth() + 1, 0);
   const asOf = monthEnd.toISOString().slice(0, 10) < today ? monthEnd.toISOString().slice(0, 10) : today;
-  const [members, categories, transactions, goals, monthlySummary] = await Promise.all([
+  const [members, categories, transactions, goals, monthlySummary, assets] = await Promise.all([
     db.execute({ sql: `SELECT u.id,u.name,u.email,m.role FROM household_members m JOIN users u ON u.id=m.user_id WHERE m.household_id=? ORDER BY m.joined_at`, args: [household.id] }),
     db.execute({ sql: "SELECT id,name,pct,sort_order FROM categories WHERE household_id=? ORDER BY sort_order", args: [household.id] }),
     db.execute({ sql: `SELECT t.*,u.name AS created_by_name,c.name AS category_name,g.name AS goal_name FROM transactions t JOIN users u ON u.id=t.user_id LEFT JOIN categories c ON c.id=t.category_id AND c.household_id=t.household_id LEFT JOIN goals g ON g.id=t.goal_id AND g.household_id=t.household_id WHERE t.household_id=? AND t.tx_date>=? AND t.tx_date<=? ORDER BY tx_date DESC,created_at DESC,t.id DESC`, args: [household.id, `${month}-01`, asOf] }),
     db.execute({ sql: GOALS_SNAPSHOT_SQL, args: [asOf, household.id] }),
     db.execute({ sql: MONTHLY_SUMMARY_SQL, args: [household.id, asOf] }),
+    db.execute({ sql: "SELECT id,name,asset_type,acquisition_cost,current_value,acquired_at FROM assets WHERE household_id=? AND disposed_at IS NULL ORDER BY acquired_at DESC,created_at DESC", args: [household.id] }),
   ]);
   return json(c, {
     month,
@@ -317,6 +318,7 @@ app.get("/api/snapshot", async (c) => {
     transactions: transactions.rows,
     goals: goals.rows,
     monthlySummary: monthlySummary.rows,
+    assets: assets.rows,
     realtime: c.env.REALTIME === "events" ? "events" : "polling",
   });
 });
@@ -360,6 +362,12 @@ async function saveTransaction(c) {
   if (goalId && !(await queryOne(db, "SELECT id FROM goals WHERE id=? AND household_id=?", [goalId, household.id]))) {
     return json(c, { error: "Goal tidak valid" }, 400);
   }
+  const assetInput = body.asset && typeof body.asset === "object" ? body.asset : null;
+  if (assetInput && editingId) return json(c, { error: "Aset baru tidak bisa ditambahkan saat mengoreksi transaksi. Buat transaksi aset baru agar riwayat tetap rapi." }, 400);
+  if (assetInput && (type !== "expense" || goalId || typeof assetInput.name !== "string" || !assetInput.name.trim() || assetInput.name.trim().length > 80 || !["household", "vehicle", "property", "electronics", "investment"].includes(assetInput.type || "household"))) {
+    return json(c, { error: "Pembelian aset harus berupa pengeluaran biasa dengan nama dan jenis aset yang valid." }, 400);
+  }
+  const assetId = assetInput ? id() : existing?.asset_id || null;
   if (goalId && type === "income") {
     const balance = await queryOne(db,
       `SELECT g.current + COALESCE(SUM(CASE WHEN t.type='expense' THEN t.amount ELSE -t.amount END), 0) AS available
@@ -388,26 +396,31 @@ async function saveTransaction(c) {
   const nextVersion = Number(existing?.version || 0) + 1;
   const nextTransaction = {
     id: editingId || id(), household_id: household.id, user_id: existing?.user_id || user.id, type, amount, note,
-    category_id: categoryId, goal_id: goalId, tx_date: date, need: type === "income" || goalId ? 0 : body.need ? 1 : 0,
+    category_id: categoryId, goal_id: goalId, asset_id: assetId, tx_date: date, need: type === "income" || goalId || assetId ? 0 : body.need ? 1 : 0,
     paid_by: paidBy, receipt_url: receiptUrl, source: existing?.source || String(body.source || "manual").slice(0, 32),
     external_ref: externalRef || null, version: nextVersion,
   };
   if (editingId) {
     const result = await db.batch([
       transactionAudit({ id: id(), householdId: household.id, transactionId: editingId, actorId: user.id, action: "update", version: Number(existing.version || 0), after: nextTransaction, createdAt: now() }),
-      { sql: "UPDATE transactions SET type=?,amount=?,note=?,category_id=?,goal_id=?,tx_date=?,need=?,paid_by=?,receipt_url=?,version=? WHERE id=? AND household_id=? AND version=?", args: [type, amount, note, categoryId, goalId, date, nextTransaction.need, paidBy, receiptUrl, nextVersion, editingId, household.id, Number(existing.version || 0)] },
+      { sql: "UPDATE transactions SET type=?,amount=?,note=?,category_id=?,goal_id=?,asset_id=?,tx_date=?,need=?,paid_by=?,receipt_url=?,version=? WHERE id=? AND household_id=? AND version=?", args: [type, amount, note, categoryId, goalId, assetId, date, nextTransaction.need, paidBy, receiptUrl, nextVersion, editingId, household.id, Number(existing.version || 0)] },
     ]);
     if (!result[1].rowsAffected) return json(c, { error: "Transaksi telah berubah. Muat ulang sebelum mencoba lagi." }, 409);
     return json(c, { ok: true, id: editingId });
   }
   const transactionId = nextTransaction.id;
   const statement = {
-    sql: `INSERT INTO transactions(id,household_id,user_id,type,amount,note,category_id,goal_id,tx_date,need,source,paid_by,receipt_url,external_ref,created_at,version)
-          VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-    args: [transactionId, household.id, user.id, type, amount, note, categoryId, goalId, date, nextTransaction.need, nextTransaction.source, paidBy, receiptUrl, externalRef || null, now(), 0],
+    sql: `INSERT INTO transactions(id,household_id,user_id,type,amount,note,category_id,goal_id,asset_id,tx_date,need,source,paid_by,receipt_url,external_ref,created_at,version)
+          VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    args: [transactionId, household.id, user.id, type, amount, note, categoryId, goalId, assetId, date, nextTransaction.need, nextTransaction.source, paidBy, receiptUrl, externalRef || null, now(), 0],
   };
   statement.sql += " ON CONFLICT DO NOTHING";
-  const created = await db.execute(statement);
+  const created = assetInput
+    ? (await db.batch([
+      { sql: "INSERT INTO assets(id,household_id,name,asset_type,acquisition_cost,current_value,acquired_at,created_at) VALUES(?,?,?,?,?,?,?,?)", args: [assetId, household.id, assetInput.name.trim(), assetInput.type || "household", amount, amount, date, now()] },
+      statement,
+    ]))[1]
+    : await db.execute(statement);
   if (!created.rowsAffected && externalRef) {
     const existing = await queryOne(db, "SELECT id FROM transactions WHERE household_id=? AND external_ref=?", [household.id, externalRef]);
     if (existing) return json(c, { ok: true, id: existing.id, duplicate: true });

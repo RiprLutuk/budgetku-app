@@ -32,6 +32,7 @@ function goalProgress(goal, index) {
 }
 
 function transactionGlyph(transaction) {
+  if (transaction.asset_id) return icon('vault');
   if (transaction.goal_id) return icon(transaction.type === 'income' ? 'down' : goalIconForName(transaction.goal_name));
   return icon(categoryIconFor({ category: transaction.category_name, note: transaction.note, type: transaction.type }));
 }
@@ -40,8 +41,8 @@ function transactionRows(rows) {
   if (!rows.length) return '<div class="empty">Belum ada transaksi di bulan ini.</div>';
   return rows.map((transaction) => {
     const isGoalWithdrawal = transaction.type === 'income' && transaction.goal_id;
-    const label = isGoalWithdrawal ? `Pencairan ${transaction.goal_name || 'goal'}` : transaction.goal_id ? `Tabungan ${transaction.goal_name || 'goal'}` : transaction.category_name || (transaction.type === 'income' ? 'Pemasukan' : 'Tanpa kategori');
-    const tone = isGoalWithdrawal ? 'is-inflow' : transaction.type === 'income' ? 'is-inflow' : transaction.goal_id ? 'is-goal' : 'is-outflow';
+    const label = transaction.asset_id ? 'Pembelian aset' : isGoalWithdrawal ? `Pencairan ${transaction.goal_name || 'goal'}` : transaction.goal_id ? `Tabungan ${transaction.goal_name || 'goal'}` : transaction.category_name || (transaction.type === 'income' ? 'Pemasukan' : 'Tanpa kategori');
+    const tone = transaction.asset_id ? 'is-asset' : isGoalWithdrawal ? 'is-inflow' : transaction.type === 'income' ? 'is-inflow' : transaction.goal_id ? 'is-goal' : 'is-outflow';
     return `<button type="button" class="ledger-row edit-tx" data-id="${escapeHtml(transaction.id)}" aria-label="Buka transaksi ${escapeHtml(transaction.note)}, ${money(transaction.amount)}">
       <span class="ledger-glyph ${tone}">${transactionGlyph(transaction)}</span>
       <span class="ledger-copy"><span class="ledger-main"><strong>${escapeHtml(transaction.note)}</strong><span class="ledger-amount ${isGoalWithdrawal || transaction.type === 'income' ? 'income' : transaction.goal_id ? 'savings' : 'expense'}">${transaction.type === 'expense' ? '-' : '+'}${money(transaction.amount)}</span></span><span class="ledger-meta"><span class="ledger-category">${escapeHtml(label)}</span><span class="ledger-member">${escapeHtml(transaction.created_by_name)}</span><time datetime="${escapeHtml(transaction.tx_date)}">${shortDate(transaction.tx_date)}</time></span></span>
@@ -70,10 +71,11 @@ function renderAllocation(health) {
     { key: 'needs', label: 'Kebutuhan', className: 'needs' },
     { key: 'wants', label: 'Keinginan', className: 'wants' },
     { key: 'savings', label: 'Tabungan', className: 'savings' },
+    { key: 'assetPurchases', label: 'Aset', className: 'assets' },
     { key: 'unallocated', label: 'Sisa', className: 'unallocated' },
   ];
-  const visualTotal = Math.max(health.income, health.needs + health.wants + health.savings + Math.max(0, health.unallocated));
-  return `<div class="allocation-stack" role="img" aria-label="Alokasi pemasukan: kebutuhan ${health.allocation.needs} persen, keinginan ${health.allocation.wants} persen, goals ${health.allocation.savings} persen, belum dialokasikan ${health.allocation.unallocated} persen">${items.map((item) => `<span class="allocation-segment ${item.className}" style="width:${health.income ? allocationWidth(health[item.key], visualTotal) : 0}%"></span>`).join('')}</div>
+  const visualTotal = Math.max(health.income, health.needs + health.wants + health.savings + health.assetPurchases + Math.max(0, health.unallocated));
+  return `<div class="allocation-stack" role="img" aria-label="Alokasi pemasukan: kebutuhan ${health.allocation.needs} persen, keinginan ${health.allocation.wants} persen, tabungan ${health.allocation.savings} persen, pembelian aset ${health.allocation.assetPurchases} persen, belum dialokasikan ${health.allocation.unallocated} persen">${items.map((item) => `<span class="allocation-segment ${item.className}" style="width:${health.income ? allocationWidth(health[item.key], visualTotal) : 0}%"></span>`).join('')}</div>
     <div class="allocation-legend">${items.map((item) => `<div class="allocation-item"><span class="allocation-dot ${item.className}"></span><span><strong>${item.label}</strong><small>${health.allocation[item.key]}%</small></span></div>`).join('')}</div>`;
 }
 
