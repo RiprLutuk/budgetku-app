@@ -5,6 +5,7 @@ import { renderGoals as renderGoalsView } from "./views/goals.js";
 import { renderSettings as renderSettingsView } from "./views/settings.js";
 import { createTransactionDialog } from "./components/transaction-dialog.js";
 import { summarizeCashflow } from "./cashflow.js";
+import { renderDashboard as renderDashboardView, renderTransactions as renderTransactionsView } from "./views/dashboard.js";
 
 let me = null,
   txDialog = null,
@@ -279,34 +280,11 @@ function insightItems(summary = monthCashflow()) {
   return out;
 }
 function renderDashboard() {
-  const summary = monthCashflow(),
-    inc = summary.income,
-    exp = summary.expense,
-    carried = summary.openingBalance,
-    available = summary.availableBalance,
-    remaining = Math.max(0, available),
-    today = new Date(),
-    todayMonth = localDateValue(today).slice(0, 7),
-    daysLeft = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate() - today.getDate() + 1,
-    safeDay = currentMonth === todayMonth ? Math.floor(remaining / daysLeft) : null,
-    balanceTone = available < 0 ? "var(--bad)" : "var(--dark)",
-    balanceFoot = carried > 0 ? `Termasuk ${rupiah(carried)} sisa bulan lalu` : carried < 0 ? `${rupiah(Math.abs(carried))} defisit bulan lalu` : "Belum ada saldo bawaan",
-    safeDayFoot = currentMonth === todayMonth ? `${daysLeft} hari hingga akhir bulan` : currentMonth < todayMonth ? "Bulan sudah selesai" : "Rencana bulan berikutnya";
-  app.innerHTML = `<div class="content">${exp > 15000000 ? `<div class="warning-banner"><b>Heads up:</b> pengeluaran bulan ini sudah ${rupiah(exp)}. Kita pakai ini sebagai sinyal untuk cek kebutuhan vs keinginan, bukan vonis boros.</div>` : ""}<div class="grid four"><div class="card card-metric"><div class="metric-label">Income</div><div class="metric-value" style="color:var(--good)">${rupiah(inc)}</div><div class="metric-foot">Bulan aktif</div></div><div class="card card-metric"><div class="metric-label">Spent</div><div class="metric-value" style="color:var(--bad)">${rupiah(exp)}</div><div class="metric-foot">${pct(exp, inc)}% dari income</div></div><div class="card card-metric"><div class="metric-label">Saldo tersedia</div><div class="metric-value" style="color:${balanceTone}">${rupiah(available)}</div><div class="metric-foot">${balanceFoot} · ${rupiah(inc - exp)} bulan ini</div></div><div class="card card-metric"><div class="metric-label">Aman / hari</div><div class="metric-value">${rupiah(safeDay)}</div><div class="metric-foot">${safeDayFoot}</div></div></div><div class="grid two" style="margin-top:14px"><div class="card"><div class="section-title"><div><h3>Insight finansial</h3><p>Rekomendasi arus kas keluarga.</p></div></div>${insightItems().map((x) => `<div class="insight ${x.kind}">${esc(x.text)}</div>`).join("")}</div><div class="card"><div class="section-title"><div><h3>Target keluarga</h3><p>Progress tabungan household</p></div><button class="secondary" data-go="goals"><span class="button-icon">${icon("arrow")}</span><span>Rincian</span></button></div>${snapshot.goals.map((g) => `<div style="margin:10px 0"><div class="split"><b>${esc(g.name)}</b><span class="small muted">${pct(g.current, g.target)}%</span></div><div class="progress" style="margin:6px 0"><span style="width:${Math.min(100, pct(g.current, g.target))}%"></span></div><div class="small muted">${rupiah(g.current)} / ${rupiah(g.target)}</div></div>`).join("")}</div></div><div class="card" style="margin-top:14px"><div class="section-title"><div><h3>Transaksi terbaru</h3><p>Update live dari semua member.</p></div><button class="secondary" data-go="transactions"><span class="button-icon">${icon("transactions")}</span><span>Lihat semua</span></button></div>${renderTxRows(monthTx().slice(0, 8))}</div></div>`;
-  bindCommon();
-}
-function renderTxRows(rows) {
-  if (!rows.length) return `<div class="empty">Belum ada transaksi.</div>`;
-  return rows
-    .map(
-      (t) =>
-        `<div class="tx-row"><div><b>${esc(t.note)}</b><div class="small muted">${esc(t.category_name || (t.type === "income" ? "Income" : "Tanpa kategori"))} · ${esc(t.created_by_name)} · ${esc(t.source)}</div>${t.goal_name ? `<span class="pill goal-pill">Tabungan ${esc(t.goal_name)}</span>` : ""}</div><div class="hide-mobile small">${esc(t.tx_date)}</div><div class="hide-mobile small">${esc(t.paid_by)}</div><div class="amount ${t.type}">${t.type === "expense" ? "-" : "+"}${rupiah(t.amount)}</div><button class="icon-btn danger-action delete-tx" data-id="${t.id}" title="Hapus transaksi" aria-label="Hapus transaksi">${icon("trash")}</button></div>`,
-    )
-    .join("");
+  const monthName = new Intl.DateTimeFormat("id-ID", { month: "long", year: "numeric" }).format(new Date(`${currentMonth}-01T00:00:00`));
+  renderDashboardView(app, { snapshot, currentMonth, summary: monthCashflow(), monthName, rupiah, insightItems: insightItems(), onBind: bindCommon });
 }
 function renderTransactions() {
-  app.innerHTML = `<div class="content"><div class="card"><div class="section-title"><div><h3>Semua transaksi</h3><p>${snapshot.transactions.length} transaksi tersimpan di server.</p></div><button id="addTx2" class="primary"><span class="button-icon">${icon("plus")}</span><span>Catat baru</span></button></div>${renderTxRows(snapshot.transactions)}</div></div>`;
-  bindCommon();
+  renderTransactionsView(app, { snapshot, rupiah, onBind: bindCommon });
 }
 function renderBudget() {
   const inc = monthCashflow().income;
@@ -672,7 +650,7 @@ document.querySelector("#quickAdd").onclick = () => openTx();
 document.querySelectorAll("dialog").forEach((dialog) => {
   dialog.addEventListener("close", closeSelects);
 });
-const navigationIcons = { dashboard: "home", transactions: "transactions", budget: "budget", goals: "goals", receipts: "receipt", family: "users", users: "shield", settings: "settings" };
+const navigationIcons = { dashboard: "overview", transactions: "ledger", budget: "allocation", goals: "target", receipts: "receipt", family: "family", users: "admin", settings: "sliders" };
 document.querySelectorAll(".nav").forEach((button) => {
   button.querySelector(".nav-icon").innerHTML = icon(navigationIcons[button.dataset.view]);
 });

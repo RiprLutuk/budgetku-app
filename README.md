@@ -13,6 +13,7 @@ Dashboard keuangan keluarga yang compact, mobile-friendly, dengan format Rupiah,
 - Auto Budget adalah rencana, bukan bukti transfer. Catat uang yang benar-benar disisihkan melalui tombol **Tabung**.
 - Invite pasangan, sinkronisasi antarperangkat, OCR nota di browser, dan impor kandidat Gmail opsional.
 - PWA dengan aset aplikasi offline; data finansial tetap membutuhkan koneksi server.
+- Desain finansial terintegrasi: IBM Plex Sans + IBM Plex Mono, hierarki saldo cockpit, dan ringkasan cashflow interaktif.
 
 ## Runtime
 

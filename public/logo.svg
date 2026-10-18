@@ -8,6 +8,6 @@
   <path d="M22 28L38 39" stroke="#f3f1e9" stroke-width="4.2" stroke-linecap="round" />
   <circle cx="25" cy="27" r="2.2" fill="#132833" />
 
-  <text x="56" y="26" fill="#132833" font-family="'Plus Jakarta Sans', system-ui, sans-serif" font-size="19" font-weight="800" letter-spacing="-0.03em">Budget<tspan fill="#705a30">Ku</tspan></text>
-  <text x="56.5" y="39" fill="#68747b" font-family="'Plus Jakarta Sans', system-ui, sans-serif" font-size="9" font-weight="700" letter-spacing="0.08em">FAMILY LEDGER &amp; GOALS</text>
+  <text x="56" y="26" fill="#132833" font-family="'IBM Plex Sans', system-ui, sans-serif" font-size="19" font-weight="800" letter-spacing="-0.03em">Budget<tspan fill="#705a30">Ku</tspan></text>
+  <text x="56.5" y="39" fill="#68747b" font-family="'IBM Plex Sans', system-ui, sans-serif" font-size="9" font-weight="700" letter-spacing="0.08em">FAMILY LEDGER &amp; GOALS</text>
 </svg>

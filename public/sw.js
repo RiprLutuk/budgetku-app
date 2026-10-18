@@ -1,4 +1,4 @@
-const CACHE = 'budgetku-family-v12-rollover';
+const CACHE = 'budgetku-family-v14-ibmplex';
 const ASSETS = [
   '/',
   '/index.html',
@@ -7,13 +7,20 @@ const ASSETS = [
   '/forms.js',
   '/cashflow.js',
   '/components/transaction-dialog.js',
+  '/views/dashboard.js',
   '/views/goals.js',
   '/views/settings.js',
   '/ui.js',
   '/money.js',
   '/favicon.svg',
   '/logo.svg',
-  '/manifest.webmanifest'
+  '/manifest.webmanifest',
+  '/fonts/IBMPlexSans-Regular.woff2',
+  '/fonts/IBMPlexSans-Medium.woff2',
+  '/fonts/IBMPlexSans-SemiBold.woff2',
+  '/fonts/IBMPlexSans-Bold.woff2',
+  '/fonts/IBMPlexMono-Regular.woff2',
+  '/fonts/IBMPlexMono-Medium.woff2'
 ];
 self.addEventListener('install', (e) => {
   self.skipWaiting();
