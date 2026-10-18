@@ -1,6 +1,7 @@
 import { bindMoneyInputs, numericAmount } from '../money.js';
 import { formMessage, validateForm, withPendingForm } from '../forms.js';
 import { escapeHtml, icon } from '../ui.js';
+import { confirmDialog } from '../dialogs.js';
 
 function googleCard() {
   return `<section class="card integration-card" aria-labelledby="googleTitle">
@@ -157,7 +158,7 @@ function mountGoogleSettings(container, { api, toast }) {
     } catch (error) { formMessage(message, error.message, 'bad'); }
   });
   clear.onclick = async () => {
-    if (!ready || !confirm('Hapus konfigurasi dan putuskan Gmail semua pengguna?')) return;
+    if (!ready || !(await confirmDialog({ title: 'Hapus integrasi Gmail?', message: 'Akun Gmail seluruh pengguna akan diputuskan dan impor dinonaktifkan.', confirmText: 'Hapus integrasi' }))) return;
     try {
       await withPendingForm(form, async () => {
         await api('/api/admin/integrations/google', { method: 'DELETE' });

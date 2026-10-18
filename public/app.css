@@ -1278,6 +1278,15 @@ dialog::backdrop {
   background: rgba(15, 23, 42, 0.45);
   backdrop-filter: blur(2px);
 }
+.confirm-dialog { width: min(calc(100vw - 32px), 360px); overflow: hidden; border-radius: 20px; }
+.confirm-card { display: grid; justify-items: center; gap: 10px; padding: 24px 20px 18px; text-align: center; }
+.confirm-icon { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 14px; color: var(--primary); background: var(--primary-soft); }
+.confirm-icon.danger { color: var(--bad); background: var(--bad-soft); }
+.confirm-icon .icon { width: 21px; height: 21px; }
+.confirm-card h2 { margin: 2px 0 0; font-size: 17px; letter-spacing: -0.03em; }
+.confirm-card p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.confirm-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; margin-top: 8px; }
+.confirm-actions button { justify-content: center; min-height: 40px; }
 .dialog-card {
   background: #fff;
   border: 0;

@@ -1,4 +1,4 @@
-const CACHE = 'budgetku-family-v39-asset-correction-assets';
+const CACHE = 'budgetku-family-v40-consistent-prompts-assets';
 const ASSETS = [
   '/',
   '/index.html',
@@ -18,6 +18,7 @@ const ASSETS = [
   '/exports.js',
   '/money.js',
   '/privacy.js',
+  '/dialogs.js',
   '/favicon.svg',
   '/logo.svg',
   '/manifest.webmanifest',

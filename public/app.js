@@ -11,6 +11,7 @@ import { createNavigation } from "./navigation.js";
 import { createPullRefresh } from "./pull-refresh.js";
 import { downloadTransactions } from "./exports.js";
 import { createPrivacyMode } from "./privacy.js";
+import { confirmDialog } from "./dialogs.js";
 
 let me = null,
   txDialog = null,
@@ -703,7 +704,7 @@ async function loadUsersList() {
     });
     container.querySelectorAll(".delete-user").forEach((btn) => {
       btn.onclick = async () => {
-        if (!confirm(`Hapus akun user "${btn.dataset.name}"? Transaksi yang sudah tercatat akan tetap aman.`)) return;
+        if (!(await confirmDialog({ title: `Hapus akun ${btn.dataset.name}?`, message: 'Transaksi yang sudah tercatat tetap aman.', confirmText: 'Hapus akun' }))) return;
         try {
           await api(`/api/admin/users/${btn.dataset.id}`, { method: "DELETE" });
           toast("User berhasil dihapus");
@@ -824,7 +825,7 @@ function bindCommon() {
   document.querySelectorAll(".delete-tx").forEach(
     (b) =>
       (b.onclick = async () => {
-        if (!confirm("Hapus transaksi ini?")) return;
+        if (!(await confirmDialog({ title: 'Hapus transaksi?', message: 'Catatan ini akan dihapus dari pembukuan.', confirmText: 'Hapus transaksi' }))) return;
         try {
           const transaction = snapshot.transactions.find((item) => item.id === b.dataset.id);
           await api(`/api/transactions/${b.dataset.id}?version=${transaction?.version ?? 0}`, { method: "DELETE" });

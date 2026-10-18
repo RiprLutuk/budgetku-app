@@ -1,6 +1,7 @@
 import { bindMoneyInputs, formatMoneyInput, numericAmount } from '../money.js';
 import { formMessage, localDateValue, validateForm, withPendingForm } from '../forms.js';
 import { closeSelects, escapeHtml, hydrateIcons, searchableSelect } from '../ui.js';
+import { confirmDialog } from '../dialogs.js';
 
 export function createTransactionDialog({ dialog, getSnapshot, save, onDelete, onSaved, getHistory }) {
   const form = dialog.querySelector('form');
@@ -113,7 +114,7 @@ export function createTransactionDialog({ dialog, getSnapshot, save, onDelete, o
   dialog.addEventListener('close', closeSelects);
 
   deleteBtn.onclick = async () => {
-    if (!editingId || !confirm('Hapus transaksi ini dari pembukuan?')) return;
+    if (!editingId || !(await confirmDialog({ title: 'Hapus transaksi?', message: 'Catatan ini akan dihapus dari pembukuan. Riwayat koreksi tetap tersimpan.', confirmText: 'Hapus transaksi' }))) return;
     try {
       await withPendingForm(form, async () => {
         await onDelete(editingId, editingVersion);

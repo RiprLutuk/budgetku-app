@@ -3,6 +3,7 @@ import { escapeHtml, icon } from '../ui.js';
 import { localDateValue, withPendingForm } from '../forms.js';
 import { goalPlan, goalProgress, summarizeGoals } from '../goal-math.js';
 import { goalIconForName } from '../goal-icons.js';
+import { confirmDialog } from '../dialogs.js';
 
 const suggestions = ['Dana Darurat', 'Pendidikan Anak', 'Renovasi Rumah', 'Liburan Keluarga', 'Investasi'];
 const dateFormatter = new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -121,7 +122,7 @@ export function renderGoals(container, { snapshot, currentMonth, rupiah, onSaveG
   container.querySelectorAll('.goal-delete').forEach((button) => {
     button.onclick = async () => {
       const goal = goals.find((item) => item.id === button.dataset.goalId);
-      if (!goal || !confirm(`Hapus goal ${goal.name}? Goal dengan saldo atau riwayat setoran akan dilindungi.`)) return;
+      if (!goal || !(await confirmDialog({ title: `Hapus ${goal.name}?`, message: 'Goal bersaldo atau memiliki riwayat setoran tetap akan dilindungi.', confirmText: 'Hapus goal' }))) return;
       try { await api(`/api/goals/${encodeURIComponent(goal.id)}`, { method: 'DELETE' }); toast('Goal dihapus'); await refresh(); } catch (error) { toast(error.message); }
     };
   });
