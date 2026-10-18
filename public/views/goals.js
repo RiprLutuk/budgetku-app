@@ -21,7 +21,7 @@ function goalStatus(plan) {
   return ['Berjalan', 'active'];
 }
 
-export function renderGoals(container, { snapshot, currentMonth, rupiah, onSaveGoal, api, toast, refresh }) {
+export function renderGoals(container, { snapshot, currentMonth, rupiah, onSaveGoal, onWithdrawGoal, api, toast, refresh }) {
   const goals = snapshot.goals || [];
   const totals = summarizeGoals(goals);
   const { target: totalTarget, current: totalCurrent } = totals;
@@ -31,7 +31,7 @@ export function renderGoals(container, { snapshot, currentMonth, rupiah, onSaveG
 
   const renderGoal = (goal) => {
     const progress = goalProgress(goal.current, goal.target);
-    const plan = goalPlan(goal);
+    const plan = goalPlan(goal, snapshot.asOf || localDateValue());
     const [status, tone] = goalStatus(plan);
     const pace = plan.complete ? '' : plan.overdue ? 'Tinjau tanggal target' : plan.perMonth ? `${rupiah(plan.perMonth)}/bln` : '';
     const paceTitle = plan.perMonth && !plan.overdue ? `Perkiraan setoran per bulan, ${plan.months} bulan tersisa` : '';
@@ -42,7 +42,7 @@ export function renderGoals(container, { snapshot, currentMonth, rupiah, onSaveG
       </div>
       <div class="goal-card-values"><div><span>Terkumpul</span><strong>${rupiah(goal.current)}</strong></div><div><span>Target</span><strong>${rupiah(goal.target)}</strong></div></div>
       <div class="progress goal-progress" role="progressbar" aria-label="Progres ${escapeHtml(goal.name)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress}"><span style="width:${progress}%"></span></div>
-      <div class="goal-card-foot"><div class="goal-card-plan"><span>${plan.complete ? 'Target tercapai' : `Sisa <strong>${rupiah(plan.remaining)}</strong>`}</span>${pace ? `<small class="goal-pace goal-pace-${tone}"${paceTitle ? ` title="${escapeHtml(paceTitle)}"` : ''}>${escapeHtml(pace)}</small>` : ''}</div><div class="goal-card-actions" role="group" aria-label="Aksi ${escapeHtml(goal.name)}"><button type="button" class="icon-btn goal-save" data-goal-id="${escapeHtml(goal.id)}" aria-label="Tambah setoran ke ${escapeHtml(goal.name)}" title="Tambah setoran">${icon('plus')}</button><button type="button" class="icon-btn goal-edit" data-goal-id="${escapeHtml(goal.id)}" aria-label="Edit ${escapeHtml(goal.name)}" title="Edit goal">${icon('edit')}</button><button type="button" class="icon-btn danger-action goal-delete" data-goal-id="${escapeHtml(goal.id)}" aria-label="Hapus ${escapeHtml(goal.name)}" title="Hapus goal">${icon('trash')}</button></div></div>
+      <div class="goal-card-foot"><div class="goal-card-plan"><span>${plan.complete ? 'Target tercapai' : `Sisa <strong>${rupiah(plan.remaining)}</strong>`}</span>${pace ? `<small class="goal-pace goal-pace-${tone}"${paceTitle ? ` title="${escapeHtml(paceTitle)}"` : ''}>${escapeHtml(pace)}</small>` : ''}</div><div class="goal-card-actions" role="group" aria-label="Aksi ${escapeHtml(goal.name)}"><button type="button" class="icon-btn goal-save" data-goal-id="${escapeHtml(goal.id)}" aria-label="Tambah setoran ke ${escapeHtml(goal.name)}" title="Tambah setoran">${icon('plus')}</button>${Number(goal.current) > 0 ? `<button type="button" class="icon-btn goal-withdraw" data-goal-id="${escapeHtml(goal.id)}" aria-label="Cairkan ${escapeHtml(goal.name)}" title="Cairkan goal">${icon('down')}</button>` : ''}<button type="button" class="icon-btn goal-edit" data-goal-id="${escapeHtml(goal.id)}" aria-label="Edit ${escapeHtml(goal.name)}" title="Edit goal">${icon('edit')}</button><button type="button" class="icon-btn danger-action goal-delete" data-goal-id="${escapeHtml(goal.id)}" aria-label="Hapus ${escapeHtml(goal.name)}" title="Hapus goal">${icon('trash')}</button></div></div>
     </article>`;
   };
 
@@ -52,12 +52,12 @@ export function renderGoals(container, { snapshot, currentMonth, rupiah, onSaveG
       <div class="goal-kpis"><div><span>Terkumpul</span><strong>${rupiah(totalCurrent)}</strong></div><div><span>Total target</span><strong>${rupiah(totalTarget)}</strong></div><div><span>Progres total</span><strong>${totalProgress}%</strong></div><div><span>Setoran ${escapeHtml(monthLabel)}</span><strong>${rupiah(monthSavings)}</strong></div></div>
     </section>
     <section class="goals-board" aria-label="Daftar goals"><div class="goal-cards">${goals.length ? goals.map(renderGoal).join('') : `<div class="empty goal-empty"><span>Belum ada goal. Mulai dari dana darurat atau tujuan paling dekat.</span><button type="button" class="secondary" data-add-goal>${icon('plus')}<span>Buat goal pertama</span></button></div>`}</div></section>
-    <dialog id="goalEditor" aria-labelledby="goalEditorTitle"><form id="goalForm" class="dialog-card form-stack" novalidate><div class="dialog-head"><div><span class="eyebrow">GOAL SETUP</span><h3 id="goalEditorTitle">Tambah goal</h3></div><button type="button" class="icon-btn" data-goal-close aria-label="Tutup dialog" title="Tutup">${icon('close')}</button></div><label for="goalName">Nama goal<input id="goalName" name="name" maxlength="60" placeholder="Dana darurat" required></label><div class="goal-suggestions"><span>Saran cepat</span>${suggestions.map((suggestion) => `<button type="button" class="suggestion-chip" data-suggestion="${escapeHtml(suggestion)}">${escapeHtml(suggestion)}</button>`).join('')}</div><div class="form-grid"><label for="goalTarget">Target nominal (Rp)<input id="goalTarget" name="target" class="money-input" inputmode="numeric" autocomplete="off" placeholder="50.000.000" required></label><label for="goalInitial">Saldo awal (Rp)<input id="goalInitial" name="initial_balance" class="money-input" inputmode="numeric" autocomplete="off" value="0" required><span class="field-help">Isi hanya saldo yang sudah ada sebelum dicatat di aplikasi.</span></label></div><label for="goalDate">Target tanggal (opsional)<input id="goalDate" name="target_date" type="date" min="${localDateValue()}"><span id="goalEstimate" class="field-help">Tambahkan tanggal untuk melihat kebutuhan setoran per bulan.</span></label><p id="goalFormMessage" class="form-message" role="status" aria-live="polite" hidden></p><div class="form-footer"><div></div><div class="actions"><button type="button" class="secondary" data-goal-close>Batal</button><button type="submit" class="primary">${icon('save')}<span>Simpan goal</span></button></div></div></form></dialog>
+    <dialog id="goalEditor" aria-labelledby="goalEditorTitle"><form id="goalForm" class="dialog-card form-stack" novalidate><div class="dialog-head"><div><span class="eyebrow">GOAL SETUP</span><h3 id="goalEditorTitle">Tambah goal</h3></div><button type="button" class="icon-btn" data-goal-close aria-label="Tutup dialog" title="Tutup">${icon('close')}</button></div><label for="goalName">Nama goal<input id="goalName" name="name" maxlength="60" placeholder="Dana darurat" required></label><div class="goal-suggestions"><span>Saran cepat</span>${suggestions.map((suggestion) => `<button type="button" class="suggestion-chip" data-suggestion="${escapeHtml(suggestion)}">${escapeHtml(suggestion)}</button>`).join('')}</div><div class="form-grid"><label for="goalTarget">Target nominal (Rp)<input id="goalTarget" name="target" class="money-input" inputmode="numeric" autocomplete="off" placeholder="50.000.000" required></label><label for="goalInitial">Saldo awal (Rp)<input id="goalInitial" name="initial_balance" class="money-input" inputmode="numeric" autocomplete="off" value="0" required><span class="field-help">Isi hanya saldo yang sudah ada sebelum dicatat di aplikasi.</span></label></div><label for="goalPurpose">Karakter goal<select id="goalPurpose" name="purpose"><option value="general">Tujuan umum</option><option value="emergency">Dana darurat</option></select><span class="field-help">Dana darurat dipakai khusus untuk menghitung runway perlindungan keluarga.</span></label><label for="goalDate">Target tanggal (opsional)<input id="goalDate" name="target_date" type="date" min="${localDateValue()}"><span id="goalEstimate" class="field-help">Tambahkan tanggal untuk melihat kebutuhan setoran per bulan.</span></label><p id="goalFormMessage" class="form-message" role="status" aria-live="polite" hidden></p><div class="form-footer"><div></div><div class="actions"><button type="button" class="secondary" data-goal-close>Batal</button><button type="submit" class="primary">${icon('save')}<span>Simpan goal</span></button></div></div></form></dialog>
   </div>`;
 
   const dialog = container.querySelector('#goalEditor');
   const form = container.querySelector('#goalForm');
-  const fields = { name: form.elements.name, target: form.elements.target, initial: form.elements.initial_balance, date: form.elements.target_date };
+  const fields = { name: form.elements.name, target: form.elements.target, initial: form.elements.initial_balance, purpose: form.elements.purpose, date: form.elements.target_date };
   let editingGoal = null;
   const message = (text = '', tone = 'muted') => { const box = form.querySelector('#goalFormMessage'); box.textContent = text; box.className = `form-message ${tone}`; box.hidden = !text; };
   const updateEstimate = () => {
@@ -94,6 +94,9 @@ export function renderGoals(container, { snapshot, currentMonth, rupiah, onSaveG
     fields.name.value = goal?.name || '';
     fields.target.value = goal ? formatMoneyInput(goal.target) : '';
     fields.initial.value = goal ? formatMoneyInput(goal.initial_balance) : '0';
+    fields.purpose.value = goal?.purpose || 'general';
+    fields.initial.disabled = Boolean(goal?.has_history);
+    fields.date.removeAttribute('min');
     fields.date.value = goal?.target_date || '';
     bindMoneyInputs(form);
     updateEstimate();
@@ -112,7 +115,7 @@ export function renderGoals(container, { snapshot, currentMonth, rupiah, onSaveG
     if (!form.reportValidity()) return;
     message();
     try {
-      const payload = { name: fields.name.value.trim(), target: numericAmount(fields.target.value), initial_balance: numericAmount(fields.initial.value), target_date: fields.date.value || null };
+      const payload = { name: fields.name.value.trim(), target: numericAmount(fields.target.value), initial_balance: numericAmount(fields.initial.value), purpose: fields.purpose.value, target_date: fields.date.value || null };
       await withPendingForm(form, () => api(editingGoal ? `/api/goals/${encodeURIComponent(editingGoal.id)}` : '/api/goals', { method: editingGoal ? 'PUT' : 'POST', body: JSON.stringify(payload) }));
       dialog.close();
       toast(editingGoal ? 'Goal diperbarui' : 'Goal baru ditambahkan');
@@ -120,6 +123,7 @@ export function renderGoals(container, { snapshot, currentMonth, rupiah, onSaveG
     } catch (error) { message(error.message, 'bad'); }
   });
   container.querySelectorAll('.goal-save').forEach((button) => { button.onclick = () => onSaveGoal(button.dataset.goalId); });
+  container.querySelectorAll('.goal-withdraw').forEach((button) => { button.onclick = () => onWithdrawGoal(button.dataset.goalId); });
   container.querySelectorAll('.goal-edit').forEach((button) => { button.onclick = () => openEditor(goals.find((goal) => goal.id === button.dataset.goalId)); });
   container.querySelectorAll('.goal-delete').forEach((button) => {
     button.onclick = async () => {

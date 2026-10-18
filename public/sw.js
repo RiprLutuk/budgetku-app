@@ -1,4 +1,4 @@
-const CACHE = 'budgetku-family-v26-compact-goals';
+const CACHE = 'budgetku-family-v27-financial-integrity';
 const ASSETS = [
   '/',
   '/index.html',
@@ -14,6 +14,7 @@ const ASSETS = [
   '/views/goals.js',
   '/views/settings.js',
   '/ui.js',
+  '/exports.js',
   '/money.js',
   '/favicon.svg',
   '/logo.svg',

@@ -40,6 +40,7 @@ const paths = {
   wallet: '<path d="M20 7V4H6a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h15V7H6a3 3 0 0 1 0-6m15 10h-5v5h5"/>',
   search: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/>',
   refresh: '<path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 6.1A8 8 0 0 1 20 12M4 12a8 8 0 0 0 13.9 5.9"/>',
+  download: '<path d="M12 3v12m0 0 5-5m-5 5-5-5M4 21h16"/>',
 };
 
 export const icon = (name, className = '') => `<svg class="icon ${className}" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${paths[name] || paths.plus}</svg>`;

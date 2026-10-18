@@ -29,6 +29,7 @@ export function renderSettings(container, { snapshot, user, api, toast, onWorksp
         <fieldset class="form-stack" ${owner ? '' : 'disabled'}>
           <label>Nama workspace<input id="hhName" name="name" value="${escapeHtml(snapshot.household.name)}" maxlength="60" required></label>
           <label>Batas pengeluaran bulanan (Rp)<input id="monthlyLimit" name="monthlyLimit" class="money-input" inputmode="numeric" autocomplete="off" value="${snapshot.household.monthly_limit}" required><span class="field-help">Pengingat saat pengeluaran mendekati batas, bukan batas transaksi.</span></label>
+          <label>Kebutuhan esensial per bulan (Rp)<input name="essentialMonthly" class="money-input" inputmode="numeric" autocomplete="off" value="${snapshot.household.essential_monthly || 0}"><span class="field-help">Estimasi sendiri untuk runway kas + dana darurat. Nilai 0 memakai rata-rata kebutuhan bulan terdahulu yang tercatat, tanpa menebak bulan kosong.</span></label>
         </fieldset>
         <div class="form-footer"><p class="form-message muted" role="status" aria-live="polite">${owner ? '' : 'Hanya pemilik workspace yang dapat mengubah pengaturan.'}</p><button class="primary" type="submit" ${owner ? '' : 'disabled'}>${icon('save')}<span>Simpan</span></button></div>
       </form>
@@ -55,7 +56,7 @@ export function renderSettings(container, { snapshot, user, api, toast, onWorksp
     const message = workspace.querySelector('[role=status]');
     try {
       const data = new FormData(workspace);
-      const payload = { name: data.get('name').trim(), monthlyLimit: numericAmount(data.get('monthlyLimit')) };
+      const payload = { name: data.get('name').trim(), monthlyLimit: numericAmount(data.get('monthlyLimit')), essentialMonthly: numericAmount(data.get('essentialMonthly') || '0') };
       await withPendingForm(workspace, async () => {
         await api('/api/household', { method: 'PUT', body: JSON.stringify(payload) });
         toast('Pengaturan workspace tersimpan');

@@ -1,36 +1,41 @@
 import { bindMoneyInputs, formatMoneyInput, numericAmount } from '../money.js';
 import { formMessage, localDateValue, validateForm, withPendingForm } from '../forms.js';
-import { closeSelects, hydrateIcons, searchableSelect } from '../ui.js';
+import { closeSelects, escapeHtml, hydrateIcons, searchableSelect } from '../ui.js';
 
-export function createTransactionDialog({ dialog, getSnapshot, save, onDelete, onSaved }) {
+export function createTransactionDialog({ dialog, getSnapshot, save, onDelete, onSaved, getHistory }) {
   const form = dialog.querySelector('form');
   const feedback = form.querySelector('.form-message[role="status"]');
   const fields = form.elements;
   const title = dialog.querySelector('#txDialogTitle');
   const submitLabel = dialog.querySelector('#txSubmitLabel');
   const deleteBtn = dialog.querySelector('#txDeleteBtn');
+  const history = dialog.querySelector('#txHistory');
   let category;
   let goal;
   let paidBy;
   let data;
   let editingId = null;
+  let editingVersion = 0;
   hydrateIcons(dialog);
 
   function categoryForGoal(goalId) {
     const selected = data?.goals.find((item) => item.id === goalId);
     if (!selected) return null;
-    const matches = data.categories.filter((item) => item.name.trim().toLowerCase() === `target ${selected.name.trim().toLowerCase()}`);
+    const matches = data.categories.filter((item) => item.name.trim().toLowerCase() === `target ${selected.name.trim().toLowerCase()}` || (selected.purpose === 'emergency' && item.name.trim().toLowerCase() === selected.name.trim().toLowerCase()));
     return matches.length === 1 ? matches[0] : null;
   }
   function syncHint() {
     const selected = data?.goals.find((item) => item.id === goal.value);
+    const withdrawal = fields.type.value === 'income';
     form.querySelector('#goalHint').textContent = selected
-      ? `Menambah tabungan ${selected.name} dan mengurangi saldo kas sekali.`
-      : '';
+      ? withdrawal
+        ? `Mencairkan ${selected.name} ke kas. Ini bukan pemasukan baru dan tidak mengubah pendapatan.`
+        : `Menambah tabungan ${selected.name} dan mengurangi saldo kas sekali.`
+      : withdrawal ? 'Kosongkan jika ini pendapatan kerja. Pilih goal hanya saat mencairkan tabungan.' : '';
   }
   function syncGoal() {
     const selected = data?.categories.find((item) => item.id === category.value);
-    const matches = (data?.goals || []).filter((item) => selected?.name.trim().toLowerCase() === `target ${item.name.trim().toLowerCase()}`);
+    const matches = (data?.goals || []).filter((item) => selected?.name.trim().toLowerCase() === `target ${item.name.trim().toLowerCase()}` || (item.purpose === 'emergency' && selected?.name.trim().toLowerCase() === item.name.trim().toLowerCase()));
     goal.value = fields.type.value === 'expense' && matches.length === 1 ? matches[0].id : '';
     syncHint();
   }
@@ -41,17 +46,17 @@ export function createTransactionDialog({ dialog, getSnapshot, save, onDelete, o
       button.classList.toggle('active', active);
       button.setAttribute('aria-pressed', String(active));
     });
-    for (const selector of ['.category-row', '.goal-allocation-row', '.need-row']) {
-      form.querySelector(selector).classList.toggle('hidden', income);
-    }
+    form.querySelector('.category-row').classList.toggle('hidden', income);
+    form.querySelector('.need-row').classList.toggle('hidden', income || Boolean(goal.value));
     category.setDisabled(income);
-    goal.setDisabled(income);
+    goal.setDisabled(false);
     form.querySelector('#paidByLabel').textContent = income ? 'Diterima oleh' : 'Dibayar oleh';
-    if (income) goal.value = '';
+    form.querySelector('label[for="txGoal"]').textContent = income ? 'Pencairan dari goal (opsional)' : 'Alokasi tabungan (opsional)';
     syncHint();
   }
   form.querySelectorAll('[data-type]').forEach((button) => {
     button.onclick = () => {
+      if (fields.type.value !== button.dataset.type) goal.value = '';
       fields.type.value = button.dataset.type;
       if (fields.type.value === 'expense') syncGoal();
       syncType();
@@ -64,7 +69,7 @@ export function createTransactionDialog({ dialog, getSnapshot, save, onDelete, o
     if (!editingId || !confirm('Hapus transaksi ini dari pembukuan?')) return;
     try {
       await withPendingForm(form, async () => {
-        await onDelete(editingId);
+        await onDelete(editingId, editingVersion);
         dialog.close();
       });
     } catch (error) { formMessage(feedback, error.message, 'bad'); }
@@ -87,13 +92,14 @@ export function createTransactionDialog({ dialog, getSnapshot, save, onDelete, o
         amount,
         note: fields.note.value.trim(),
         categoryId: income ? null : category.value || null,
-        goalId: income ? null : goal.value || null,
+        goalId: goal.value || null,
         date: fields.date.value,
-        need: !income && fields.need.checked,
+        need: !income && !goal.value && fields.need.checked,
         paidBy: paidBy.value,
         source: fields.source.value,
         receiptUrl: fields.receiptUrl.value || null,
         externalRef: fields.externalRef.value || null,
+        ...(editingId ? { version: editingVersion } : {}),
       };
       await withPendingForm(form, async () => {
         closeSelects();
@@ -111,6 +117,7 @@ export function createTransactionDialog({ dialog, getSnapshot, save, onDelete, o
       form.reset();
       formMessage(feedback);
       editingId = prefill.id || null;
+      editingVersion = Number(prefill.version || 0);
       title.textContent = editingId ? 'Koreksi transaksi' : 'Catat transaksi';
       submitLabel.textContent = editingId ? 'Simpan koreksi' : 'Simpan transaksi';
       deleteBtn.hidden = !editingId;
@@ -118,10 +125,11 @@ export function createTransactionDialog({ dialog, getSnapshot, save, onDelete, o
       fields.amount.value = formatMoneyInput(prefill.amount || '');
       fields.note.value = prefill.note || '';
       fields.date.value = prefill.date || prefill.tx_date || localDateValue();
+      fields.date.max = localDateValue();
       fields.need.checked = prefill.need !== undefined ? Boolean(prefill.need) : true;
       fields.source.value = prefill.source || 'manual';
       fields.receiptUrl.value = prefill.receiptUrl || prefill.receipt_url || '';
-      fields.externalRef.value = prefill.externalRef || prefill.external_ref || '';
+      fields.externalRef.value = prefill.externalRef || prefill.external_ref || (editingId ? '' : `manual:${crypto.randomUUID()}`);
       category = searchableSelect(form.querySelector('#categorySelect'), {
         name: 'category', label: 'Kategori', inputId: 'txCategory',
         options: [{ value: '', label: 'Tanpa kategori' }, ...data.categories.map((item) => ({ value: item.id, label: item.name }))],
@@ -134,8 +142,8 @@ export function createTransactionDialog({ dialog, getSnapshot, save, onDelete, o
         value: prefill.goalId ?? prefill.goal_id ?? '',
         onChange(selected) {
           const matching = categoryForGoal(selected);
-          if (matching) category.value = matching.id;
-          syncHint();
+          if (matching && fields.type.value === 'expense') category.value = matching.id;
+          syncType();
         },
       });
       paidBy = searchableSelect(form.querySelector('#paidBySelect'), {
@@ -144,6 +152,25 @@ export function createTransactionDialog({ dialog, getSnapshot, save, onDelete, o
         value: prefill.paidBy ?? prefill.paid_by ?? 'shared',
       });
       if (prefill.goalId === undefined && prefill.goal_id === undefined) syncGoal();
+      history.hidden = !editingId;
+      history.open = false;
+      history.querySelector('[data-history]').textContent = '';
+      history.ontoggle = async () => {
+        if (!history.open || !editingId || !getHistory) return;
+        const transactionId = editingId;
+        const target = history.querySelector('[data-history]');
+        target.textContent = 'Memuat riwayat...';
+        try {
+          const result = await getHistory(transactionId);
+          if (editingId !== transactionId) return;
+          target.innerHTML = result.history.length ? result.history.map((entry) => {
+            const before = JSON.parse(entry.before_json);
+            const after = entry.after_json ? JSON.parse(entry.after_json) : null;
+            const format = (value) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(value);
+            return `<p><strong>${escapeHtml(entry.actor_name || 'Pengguna')}</strong> · ${escapeHtml(new Date(entry.created_at).toLocaleString('id-ID'))}<br>${entry.action === 'delete' ? 'Dihapus' : 'Dikoreksi'}: ${escapeHtml(before.note)} (${format(before.amount)})${after ? ` → ${escapeHtml(after.note)} (${format(after.amount)})` : ''}</p>`;
+          }).join('') : 'Belum ada koreksi.';
+        } catch (error) { if (editingId === transactionId) target.textContent = error.message; }
+      };
       syncType();
       bindMoneyInputs(form);
       dialog.showModal();

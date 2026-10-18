@@ -41,5 +41,8 @@ jobs:
       - name: Validate Worker bundle
         run: npm run deploy:check
 
+      - name: Apply D1 schema migrations
+        run: npm run db:migrate:remote
+
       - name: Deploy to Cloudflare Workers
         run: npm run deploy

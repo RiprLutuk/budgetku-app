@@ -8,6 +8,7 @@ import { financialHealth, summarizeCashflow } from "./cashflow.js";
 import { renderDashboard as renderDashboardView, renderTransactions as renderTransactionsView } from "./views/dashboard.js";
 import { createNavigation } from "./navigation.js";
 import { createPullRefresh } from "./pull-refresh.js";
+import { downloadTransactions } from "./exports.js";
 
 let me = null,
   txDialog = null,
@@ -265,7 +266,8 @@ function renderChrome() {
   });
 }
 const monthTx = () => snapshot.transactions.filter((transaction) => transaction.tx_date.slice(0, 7) === currentMonth);
-const monthCashflow = () => summarizeCashflow(snapshot.monthlySummary, currentMonth, snapshot.transactions);
+const monthCashflow = () => summarizeCashflow(snapshot.monthlySummary, currentMonth, snapshot.transactions, snapshot.goals);
+const monthHealth = (summary = monthCashflow()) => financialHealth(summary, snapshot.monthlySummary, currentMonth, snapshot.goals, snapshot.household);
 function render() {
   document
     .querySelectorAll(".nav")
@@ -299,13 +301,17 @@ function render() {
 }
 function insightItems(summary = monthCashflow()) {
   const inc = summary.income,
-    exp = summary.expense,
+    exp = summary.spending,
     need = summary.needsExpense,
-    spending = exp - summary.goalSavings,
+    spending = summary.spending,
     wants = Math.max(0, spending - need),
-    saveAmt = summary.goalSavings,
-    health = financialHealth(summary, snapshot.monthlySummary, currentMonth),
+    saveAmt = summary.netGoalSavings,
+    health = monthHealth(summary),
     out = [];
+  if (summary.availableBalance < 0)
+    out.push({ kind: "bad", text: `Kas operasional minus ${rupiah(-summary.availableBalance)}. Rekonsiliasi saldo dan transaksi; saldo goals bukan kas bebas belanja.` });
+  if (health.cashDeficit > 0)
+    out.push({ kind: "bad", text: `Arus kas bulan ini defisit ${rupiah(health.cashDeficit)}. Pencairan goals menambah kas, bukan pendapatan baru.` });
   if (exp > snapshot.household.monthly_limit)
     out.push({
       kind: "bad",
@@ -319,7 +325,7 @@ function insightItems(summary = monthCashflow()) {
   if (inc > 0 && saveAmt / inc < 0.2)
     out.push({
       kind: "warn",
-      text: `Setoran goals baru ${Math.max(0, pct(saveAmt, inc))}% dari pemasukan. Lindungi alokasi tabungan sebelum lifestyle bertambah.`,
+      text: `Setoran bersih goals ${pct(saveAmt, inc)}% dari pendapatan. Acuan 20% bersifat fleksibel, bukan kewajiban.`,
     });
   if (inc > 0 && health.allocation.needs > 50)
     out.push({
@@ -334,12 +340,7 @@ function insightItems(summary = monthCashflow()) {
   if (health.runway.tone === "bad")
     out.push({
       kind: "warn",
-      text: `Ketahanan kas baru sekitar ${health.runway.months.toFixed(1)} bulan kebutuhan. Prioritaskan buffer sebelum menambah komitmen baru.`,
-    });
-  if (spending > 0 && wants / spending > 0.2)
-    out.push({
-      kind: "warn",
-      text: `Sekitar ${pct(wants, spending)}% belanja di luar tabungan ditandai sebagai keinginan. Ini area pertama yang paling mudah ditekan.`,
+      text: `Kas dan dana darurat teralokasi menutup sekitar ${health.runway.months.toFixed(1)} bulan kebutuhan tercatat. Cek basis perhitungan dan kelengkapan data.`,
     });
   const over = snapshot.categories
     .map((c) => {
@@ -366,10 +367,10 @@ function insightItems(summary = monthCashflow()) {
 function renderDashboard() {
   const monthName = new Intl.DateTimeFormat("id-ID", { month: "long", year: "numeric" }).format(new Date(`${currentMonth}-01T00:00:00`));
   const summary = monthCashflow();
-  renderDashboardView(app, { snapshot, currentMonth, summary, health: financialHealth(summary, snapshot.monthlySummary, currentMonth), monthName, rupiah, insightItems: insightItems(summary), onBind: bindCommon });
+  renderDashboardView(app, { snapshot, currentMonth, summary, health: monthHealth(summary), monthName, rupiah, insightItems: insightItems(summary), onBind: bindCommon });
 }
 function renderTransactions() {
-  renderTransactionsView(app, { snapshot, currentMonth, rupiah, onBind: bindCommon });
+  renderTransactionsView(app, { snapshot, currentMonth, rupiah, onBind: bindCommon, onExportCsv: downloadTransactions });
 }
 function renderBudget() {
   const income = monthCashflow().income;
@@ -547,6 +548,10 @@ function renderGoals() {
     onSaveGoal: (goalId) => {
       const goal = snapshot.goals.find((item) => item.id === goalId);
       openTx({ type: "expense", note: `Tabungan ${goal.name}`, goalId: goal.id });
+    },
+    onWithdrawGoal: (goalId) => {
+      const goal = snapshot.goals.find((item) => item.id === goalId);
+      openTx({ type: "income", note: `Pencairan ${goal.name}`, goalId: goal.id });
     },
   });
 }
@@ -815,7 +820,8 @@ function openTx(prefill = {}) {
   txDialog?.open({ ...prefill, date });
 }
 function bindCommon() {
-  document.querySelector("#addTx2")?.addEventListener("click", () => openTx());
+  const addTransaction = document.querySelector("#addTx2");
+  if (addTransaction) addTransaction.onclick = () => openTx();
   document.querySelectorAll("[data-go]").forEach(
     (b) =>
       (b.onclick = () => {
@@ -841,7 +847,8 @@ function bindCommon() {
       (b.onclick = async () => {
         if (!confirm("Hapus transaksi ini?")) return;
         try {
-          await api(`/api/transactions/${b.dataset.id}`, { method: "DELETE" });
+          const transaction = snapshot.transactions.find((item) => item.id === b.dataset.id);
+          await api(`/api/transactions/${b.dataset.id}?version=${transaction?.version ?? 0}`, { method: "DELETE" });
           await refreshSnapshot();
         } catch (error) {
           toast(error.message);
@@ -993,11 +1000,12 @@ txDialog = createTransactionDialog({
   dialog: document.querySelector("#txDialog"),
   getSnapshot: () => snapshot,
   save: (payload, id) => api(id ? `/api/transactions/${encodeURIComponent(id)}` : "/api/transactions", { method: id ? "PUT" : "POST", body: JSON.stringify(payload) }),
-  onDelete: async (id) => {
-    await api(`/api/transactions/${encodeURIComponent(id)}`, { method: "DELETE" });
+  onDelete: async (id, version) => {
+    await api(`/api/transactions/${encodeURIComponent(id)}?version=${version}`, { method: "DELETE" });
     toast("Transaksi dihapus");
     await refreshSnapshot().catch(() => {});
   },
+  getHistory: (id) => api(`/api/transactions/${encodeURIComponent(id)}/history`),
   onSaved: async (id) => {
     toast(id ? "Koreksi tersimpan" : "Transaksi tersimpan");
     await refreshSnapshot().catch(() => {});

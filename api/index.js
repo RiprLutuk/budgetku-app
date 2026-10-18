@@ -4,13 +4,14 @@ import { bodyLimit } from "hono/body-limit";
 import crypto from "node:crypto";
 import { getDb, queryOne } from "../lib/db.js";
 import { GOAL_FOR_CATEGORY_SQL, GOALS_SNAPSHOT_SQL } from "../lib/goals.js";
-import { MONTHLY_SUMMARY_SQL } from "../lib/transactions.js";
+import { MONTHLY_SUMMARY_SQL, transactionAudit } from "../lib/transactions.js";
 import { ensureSuperadmin, hashPassword, mountAdminRoutes, needsPasswordRehash, verifyPassword } from "../lib/admin.js";
 import { googleOAuthConfig, isGoogleOAuthConfigured } from "../lib/oauth.js";
 
 const app = new Hono();
 
 const now = () => new Date().toISOString();
+const todayJakarta = () => new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Jakarta", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 const id = () => crypto.randomUUID();
 const token = (bytes = 32) => crypto.randomBytes(bytes).toString("base64url");
 const normEmail = (value) => String(value || "").trim().toLowerCase();
@@ -92,10 +93,11 @@ function goalFields(body, existing = {}) {
   const target = body.target === undefined ? existing.target : body.target;
   const initial = body.initial_balance === undefined ? existing.current ?? 0 : body.initial_balance;
   const date = body.target_date === undefined ? existing.target_date ?? null : body.target_date;
-  if (typeof name !== "string" || !name.trim() || name.trim().length > 60 || !validMoney(target, 1) || !validMoney(initial) || (date !== null && date !== "" && (typeof date !== "string" || !validDate(date)))) {
+  const purpose = body.purpose === undefined ? existing.purpose ?? "general" : body.purpose;
+  if (typeof name !== "string" || !name.trim() || name.trim().length > 60 || !validMoney(target, 1) || !validMoney(initial) || !["general", "emergency"].includes(purpose) || (date !== null && date !== "" && (typeof date !== "string" || !validDate(date)))) {
     throw new HTTPException(400, { message: "Nama goal wajib diisi, target harus lebih dari nol, dan saldo awal harus nominal rupiah bulat non-negatif." });
   }
-  return { name: name.trim(), target, initial, date: date || null };
+  return { name: name.trim(), target, initial, date: date || null, purpose };
 }
 async function validateOwnedRows(db, table, rows, householdId) {
   const ids = rows.map((row) => row?.id);
@@ -216,6 +218,10 @@ app.use("*", async (c, next) => {
 });
 app.onError((error, c) => {
   if (error instanceof HTTPException) return json(c, { error: error.message }, error.status);
+  const message = String(error.message || "");
+  if (message.includes("GOAL_BALANCE_NEGATIVE")) return json(c, { error: "Saldo goal tidak cukup pada tanggal transaksi. Koreksi ini juga tidak boleh membuat pencairan berikutnya minus." }, 409);
+  if (message.includes("GOAL_INITIAL_LOCKED")) return json(c, { error: "Saldo awal terkunci setelah ada riwayat. Gunakan setoran, pencairan, atau koreksi transaksi terkait." }, 409);
+  if (message.includes("INVALID_GOAL")) return json(c, { error: "Goal tidak valid atau bukan milik keluarga ini" }, 400);
   console.error("BudgetKu API gagal:", error.code || error.name, error.message);
   return json(c, { error: "Permintaan gagal. Silakan coba lagi." }, 500);
 });
@@ -289,18 +295,23 @@ app.get("/api/snapshot", async (c) => {
   if (!user) return;
   const household = await requireHousehold(c, user);
   if (!household) return;
-  const month = c.req.query("month") || now().slice(0, 7);
+  const today = todayJakarta();
+  const month = c.req.query("month") || today.slice(0, 7);
   if (!validDate(`${month}-01`)) return json(c, { error: "Bulan tidak valid" }, 400);
+  const monthEnd = new Date(`${month}-01T00:00:00Z`);
+  monthEnd.setUTCMonth(monthEnd.getUTCMonth() + 1, 0);
+  const asOf = monthEnd.toISOString().slice(0, 10) < today ? monthEnd.toISOString().slice(0, 10) : today;
   const [members, categories, transactions, goals, monthlySummary] = await Promise.all([
     db.execute({ sql: `SELECT u.id,u.name,u.email,m.role FROM household_members m JOIN users u ON u.id=m.user_id WHERE m.household_id=? ORDER BY m.joined_at`, args: [household.id] }),
     db.execute({ sql: "SELECT id,name,pct,sort_order FROM categories WHERE household_id=? ORDER BY sort_order", args: [household.id] }),
-    db.execute({ sql: `SELECT t.*,u.name AS created_by_name,c.name AS category_name,g.name AS goal_name FROM transactions t JOIN users u ON u.id=t.user_id LEFT JOIN categories c ON c.id=t.category_id AND c.household_id=t.household_id LEFT JOIN goals g ON g.id=t.goal_id AND g.household_id=t.household_id WHERE t.household_id=? AND t.tx_date>=? AND t.tx_date<=? ORDER BY tx_date DESC,created_at DESC,t.id DESC`, args: [household.id, `${month}-01`, `${month}-31`] }),
-    db.execute({ sql: GOALS_SNAPSHOT_SQL, args: [household.id] }),
-    db.execute({ sql: MONTHLY_SUMMARY_SQL, args: [household.id] }),
+    db.execute({ sql: `SELECT t.*,u.name AS created_by_name,c.name AS category_name,g.name AS goal_name FROM transactions t JOIN users u ON u.id=t.user_id LEFT JOIN categories c ON c.id=t.category_id AND c.household_id=t.household_id LEFT JOIN goals g ON g.id=t.goal_id AND g.household_id=t.household_id WHERE t.household_id=? AND t.tx_date>=? AND t.tx_date<=? ORDER BY tx_date DESC,created_at DESC,t.id DESC`, args: [household.id, `${month}-01`, asOf] }),
+    db.execute({ sql: GOALS_SNAPSHOT_SQL, args: [asOf, household.id] }),
+    db.execute({ sql: MONTHLY_SUMMARY_SQL, args: [household.id, asOf] }),
   ]);
   return json(c, {
     month,
-    household: { id: household.id, name: household.name, role: household.role, monthly_limit: household.monthly_limit },
+    asOf,
+    household: { id: household.id, name: household.name, role: household.role, monthly_limit: household.monthly_limit, essential_monthly: household.essential_monthly },
     members: members.rows,
     categories: categories.rows,
     transactions: transactions.rows,
@@ -319,6 +330,9 @@ async function saveTransaction(c) {
   if (editingId && !existing) return json(c, { error: "Transaksi tidak ditemukan" }, 404);
   if (existing && household.role !== "owner" && existing.user_id !== user.id) return json(c, { error: "Hanya pencatat transaksi atau owner yang bisa mengoreksi transaksi" }, 403);
   const body = await readJson(c);
+  if (editingId && (!Number.isSafeInteger(body.version) || body.version !== Number(existing.version || 0))) {
+    return json(c, { error: "Transaksi telah berubah atau memakai versi lama. Muat ulang sebelum mengoreksi." }, 409);
+  }
   const type = body.type;
   const amount = body.amount;
   const note = String(body.note || "").trim();
@@ -328,6 +342,11 @@ async function saveTransaction(c) {
     return json(c, { error: "Transaksi tidak valid. Cek tanggal, nominal, dan catatan." }, 400);
   }
   if (externalRef && externalRef.length > 128) return json(c, { error: "Referensi eksternal terlalu panjang" }, 400);
+  if (date > todayJakarta()) return json(c, { error: "Tanggal masih di masa depan. Pembukuan ini hanya mencatat uang yang benar-benar sudah masuk atau keluar." }, 400);
+  if (!editingId && externalRef) {
+    const duplicate = await queryOne(db, "SELECT id FROM transactions WHERE household_id=? AND external_ref=?", [household.id, externalRef]);
+    if (duplicate) return json(c, { ok: true, id: duplicate.id, duplicate: true });
+  }
   const categoryId = type === "income" ? null : String(body.categoryId || "").trim() || null;
   if (categoryId) {
     const category = await queryOne(db, "SELECT id FROM categories WHERE id=? AND household_id=?", [categoryId, household.id]);
@@ -335,7 +354,6 @@ async function saveTransaction(c) {
   }
   if (body.goalId != null && typeof body.goalId !== "string") return json(c, { error: "Goal tidak valid" }, 400);
   let goalId = typeof body.goalId === "string" ? body.goalId.trim() || null : null;
-  if (type === "income" && goalId) return json(c, { error: "Goal hanya untuk setoran tabungan melalui pengeluaran" }, 400);
   if (type === "expense" && body.goalId === undefined && categoryId) {
     goalId = (await queryOne(db, GOAL_FOR_CATEGORY_SQL, [categoryId, household.id]))?.id || null;
   }
@@ -354,18 +372,26 @@ async function saveTransaction(c) {
       return json(c, { error: "Nota tidak valid" }, 400);
     }
   }
+  const nextVersion = Number(existing?.version || 0) + 1;
+  const nextTransaction = {
+    id: editingId || id(), household_id: household.id, user_id: existing?.user_id || user.id, type, amount, note,
+    category_id: categoryId, goal_id: goalId, tx_date: date, need: type === "income" || goalId ? 0 : body.need ? 1 : 0,
+    paid_by: paidBy, receipt_url: receiptUrl, source: existing?.source || String(body.source || "manual").slice(0, 32),
+    external_ref: externalRef || null, version: nextVersion,
+  };
   if (editingId) {
-    await db.execute({
-      sql: "UPDATE transactions SET type=?,amount=?,note=?,category_id=?,goal_id=?,tx_date=?,need=?,paid_by=?,receipt_url=? WHERE id=? AND household_id=?",
-      args: [type, amount, note, categoryId, goalId, date, type === "income" || goalId ? 0 : body.need ? 1 : 0, paidBy, receiptUrl, editingId, household.id],
-    });
+    const result = await db.batch([
+      transactionAudit({ id: id(), householdId: household.id, transactionId: editingId, actorId: user.id, action: "update", version: Number(existing.version || 0), after: nextTransaction, createdAt: now() }),
+      { sql: "UPDATE transactions SET type=?,amount=?,note=?,category_id=?,goal_id=?,tx_date=?,need=?,paid_by=?,receipt_url=?,version=? WHERE id=? AND household_id=? AND version=?", args: [type, amount, note, categoryId, goalId, date, nextTransaction.need, paidBy, receiptUrl, nextVersion, editingId, household.id, Number(existing.version || 0)] },
+    ]);
+    if (!result[1].rowsAffected) return json(c, { error: "Transaksi telah berubah. Muat ulang sebelum mencoba lagi." }, 409);
     return json(c, { ok: true, id: editingId });
   }
-  const transactionId = id();
+  const transactionId = nextTransaction.id;
   const statement = {
-    sql: `INSERT INTO transactions(id,household_id,user_id,type,amount,note,category_id,goal_id,tx_date,need,source,paid_by,receipt_url,external_ref,created_at)
-          VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-    args: [transactionId, household.id, user.id, type, amount, note, categoryId, goalId, date, type === "income" || goalId ? 0 : body.need ? 1 : 0, String(body.source || "manual").slice(0, 32), paidBy, receiptUrl, externalRef || null, now()],
+    sql: `INSERT INTO transactions(id,household_id,user_id,type,amount,note,category_id,goal_id,tx_date,need,source,paid_by,receipt_url,external_ref,created_at,version)
+          VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    args: [transactionId, household.id, user.id, type, amount, note, categoryId, goalId, date, nextTransaction.need, nextTransaction.source, paidBy, receiptUrl, externalRef || null, now(), 0],
   };
   statement.sql += " ON CONFLICT DO NOTHING";
   const created = await db.execute(statement);
@@ -378,15 +404,32 @@ async function saveTransaction(c) {
 app.post("/api/transactions", saveTransaction);
 app.put("/api/transactions/:id", saveTransaction);
 
+app.get("/api/transactions/:id/history", async (c) => {
+  const db = getDb(c.env.DB);
+  const household = await requireHousehold(c, await requireUser(c));
+  const history = await db.execute({
+    sql: `SELECT audit.action,audit.before_json,audit.after_json,audit.created_at,users.name AS actor_name
+      FROM transaction_audit audit LEFT JOIN users ON users.id=audit.actor_id
+      WHERE audit.household_id=? AND audit.transaction_id=? ORDER BY audit.created_at DESC,audit.id DESC`,
+    args: [household.id, c.req.param("id")],
+  });
+  return json(c, { history: history.rows });
+});
+
 app.delete("/api/transactions/:id", async (c) => {
   const db = getDb(c.env.DB);
   const user = await requireUser(c);
   const household = await requireHousehold(c, user);
-  const existing = await queryOne(db, "SELECT user_id FROM transactions WHERE id=? AND household_id=?", [c.req.param("id"), household.id]);
+  const existing = await queryOne(db, "SELECT * FROM transactions WHERE id=? AND household_id=?", [c.req.param("id"), household.id]);
   if (!existing) return json(c, { error: "Transaksi tidak ditemukan" }, 404);
   if (household.role !== "owner" && existing.user_id !== user.id) return json(c, { error: "Hanya pencatat transaksi atau owner yang bisa menghapus transaksi" }, 403);
-  const result = await db.execute({ sql: "DELETE FROM transactions WHERE id=? AND household_id=?", args: [c.req.param("id"), household.id] });
-  if (!result.rowsAffected) return json(c, { error: "Transaksi tidak ditemukan" }, 404);
+  const version = c.req.query("version");
+  if (!/^\d+$/.test(version || "") || Number(version) !== existing.version) return json(c, { error: "Versi transaksi berubah. Muat ulang sebelum menghapus." }, 409);
+  const result = await db.batch([
+    transactionAudit({ id: id(), householdId: household.id, transactionId: c.req.param("id"), actorId: user.id, action: "delete", version: Number(existing.version || 0), createdAt: now() }),
+    { sql: "DELETE FROM transactions WHERE id=? AND household_id=? AND version=?", args: [c.req.param("id"), household.id, Number(existing.version || 0)] },
+  ]).then((items) => items[1]);
+  if (!result.rowsAffected) return json(c, { error: "Transaksi telah berubah. Muat ulang sebelum menghapus." }, 409);
   return json(c, { ok: true });
 });
 
@@ -422,10 +465,10 @@ app.post("/api/goals", async (c) => {
   const goal = goalFields(await readJson(c));
   const goalId = id();
   const created = await db.execute({
-    sql: `INSERT INTO goals(id,household_id,name,target,current,target_date,sort_order)
-      SELECT ?,?,?,?,?,?,COALESCE(MAX(sort_order),-1)+1 FROM goals WHERE household_id=?
+    sql: `INSERT INTO goals(id,household_id,name,target,current,target_date,purpose,sort_order)
+      SELECT ?,?,?,?,?,?,?,COALESCE(MAX(sort_order),-1)+1 FROM goals WHERE household_id=?
       HAVING COUNT(*)<50 AND NOT EXISTS (SELECT 1 FROM goals WHERE household_id=? AND lower(trim(name))=lower(?))`,
-    args: [goalId, household.id, goal.name, goal.target, goal.initial, goal.date, household.id, household.id, goal.name],
+    args: [goalId, household.id, goal.name, goal.target, goal.initial, goal.date, goal.purpose, household.id, household.id, goal.name],
   });
   if (!created.rowsAffected) return json(c, { error: "Nama goal sudah dipakai atau batas 50 goal sudah tercapai" }, 409);
   return json(c, { ok: true, id: goalId }, 201);
@@ -440,9 +483,9 @@ app.put("/api/goals/:id", async (c) => {
   if (!existing) return json(c, { error: "Goal tidak ditemukan" }, 404);
   const goal = goalFields(await readJson(c), existing);
   const updated = await db.execute({
-    sql: `UPDATE goals SET name=?,target=?,current=?,target_date=? WHERE id=? AND household_id=?
+    sql: `UPDATE goals SET name=?,target=?,current=?,target_date=?,purpose=? WHERE id=? AND household_id=?
       AND NOT EXISTS (SELECT 1 FROM goals WHERE household_id=? AND id<>? AND lower(trim(name))=lower(?))`,
-    args: [goal.name, goal.target, goal.initial, goal.date, goalId, household.id, household.id, goalId, goal.name],
+    args: [goal.name, goal.target, goal.initial, goal.date, goal.purpose, goalId, household.id, household.id, goalId, goal.name],
   });
   if (!updated.rowsAffected) return json(c, { error: "Nama goal sudah dipakai" }, 409);
   return json(c, { ok: true });
@@ -481,8 +524,8 @@ app.put("/api/goals", async (c) => {
   const statements = goals.map((item, sortOrder) => {
     const goal = updates.get(item.id);
     return {
-      sql: "UPDATE goals SET name=?,target=?,current=?,target_date=?,sort_order=? WHERE id=? AND household_id=?",
-      args: [goal.name, goal.target, goal.initial, goal.date, sortOrder, item.id, household.id],
+      sql: "UPDATE goals SET name=?,target=?,current=?,target_date=?,purpose=?,sort_order=? WHERE id=? AND household_id=?",
+      args: [goal.name, goal.target, goal.initial, goal.date, goal.purpose, sortOrder, item.id, household.id],
     };
   });
   await db.batch(statements);
@@ -497,10 +540,11 @@ app.put("/api/household", async (c) => {
   const body = await readJson(c);
   const name = String(body.name ?? household.name).trim();
   const monthlyLimit = body.monthlyLimit ?? household.monthly_limit;
-  if (!name || name.length > 100 || !validMoney(monthlyLimit)) {
+  const essentialMonthly = body.essentialMonthly ?? household.essential_monthly;
+  if (!name || name.length > 100 || !validMoney(monthlyLimit) || !validMoney(essentialMonthly)) {
     return json(c, { error: "Settings tidak valid" }, 400);
   }
-  await db.execute({ sql: "UPDATE households SET name=?,monthly_limit=? WHERE id=?", args: [name, monthlyLimit, household.id] });
+  await db.execute({ sql: "UPDATE households SET name=?,monthly_limit=?,essential_monthly=? WHERE id=?", args: [name, monthlyLimit, essentialMonthly, household.id] });
   return json(c, { ok: true });
 });
 

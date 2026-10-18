@@ -1,60 +1,111 @@
-export function summarizeCashflow(monthlySummary = [], month, transactions = []) {
+function amount(value) {
+  return Number.isFinite(Number(value)) ? Number(value) : 0;
+}
+
+function isEmergencyGoal(goal) {
+  return goal?.purpose === 'emergency';
+}
+
+function goalBalances(goals = []) {
+  return goals.reduce((totals, goal) => {
+    const current = Math.max(0, amount(goal.current));
+    totals.total += current;
+    if (isEmergencyGoal(goal)) totals.emergency += current;
+    return totals;
+  }, { total: 0, emergency: 0 });
+}
+
+export function summarizeCashflow(monthlySummary = [], month, transactions = [], goals = []) {
   const source = monthlySummary.length ? monthlySummary : buildMonthlySummary(transactions);
   let openingBalance = 0;
   let income = 0;
+  let goalWithdrawals = 0;
   let expense = 0;
   let goalSavings = 0;
   let needsExpense = 0;
   for (const summary of source) {
+    const cashInflow = amount(summary.cash_inflow ?? amount(summary.income) + amount(summary.goal_withdrawals));
     if (summary.month < month) {
-      openingBalance += Number(summary.income) - Number(summary.expense);
+      openingBalance += cashInflow - amount(summary.expense);
     } else if (summary.month === month) {
-      income = Number(summary.income);
-      expense = Number(summary.expense);
-      goalSavings = Number(summary.goal_savings || 0);
-      needsExpense = Number(summary.needs_expense || 0);
+      income = amount(summary.income);
+      goalWithdrawals = amount(summary.goal_withdrawals);
+      expense = amount(summary.expense);
+      goalSavings = amount(summary.goal_savings);
+      needsExpense = amount(summary.needs_expense);
     }
   }
-  const cashflow = income - expense;
-  return { openingBalance, income, expense, spending: expense - goalSavings, goalSavings, needsExpense, cashflow, availableBalance: openingBalance + cashflow };
+  const cashInflow = income + goalWithdrawals;
+  const cashflow = cashInflow - expense;
+  const availableBalance = openingBalance + cashflow;
+  const balances = goalBalances(goals);
+  return {
+    openingBalance,
+    income,
+    goalWithdrawals,
+    cashInflow,
+    expense,
+    spending: Math.max(0, expense - goalSavings),
+    goalSavings,
+    netGoalSavings: goalSavings - goalWithdrawals,
+    needsExpense,
+    cashflow,
+    availableBalance,
+    totalLiquidity: availableBalance + balances.total,
+    emergencyGoalBalance: balances.emergency,
+    totalGoalBalance: balances.total,
+  };
 }
 
-export function financialHealth(summary = {}, monthlySummary = [], month, today = new Date()) {
-  const income = Math.max(0, Number(summary.income || 0));
-  const needs = Math.max(0, Number(summary.needsExpense || 0));
-  const savings = Math.max(0, Number(summary.goalSavings || 0));
-  const spending = Math.max(0, Number(summary.spending || 0));
+export function financialHealth(summary = {}, monthlySummary = [], month, goals = [], household = {}, today = new Date()) {
+  const income = Math.max(0, amount(summary.income));
+  const needs = Math.max(0, amount(summary.needsExpense));
+  const netGoalSavings = amount(summary.goalSavings) - amount(summary.goalWithdrawals);
+  const savings = Math.max(0, netGoalSavings);
+  const spending = Math.max(0, amount(summary.spending));
   const wants = Math.max(0, spending - needs);
   const allocationBasis = income;
-  const unallocated = Math.max(0, income - needs - wants - savings);
-  const share = (amount) => allocationBasis ? Math.round((amount / allocationBasis) * 100) : 0;
+  const retained = income - spending;
+  const unallocated = Math.max(0, retained - savings);
+  const share = (value) => allocationBasis ? Math.round((value / allocationBasis) * 100) : 0;
   const allocation = {
     needs: share(needs),
     wants: share(wants),
     savings: share(savings),
-    unallocated: share(unallocated),
+    unallocated: share(Math.max(0, unallocated)),
   };
   const thisMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
   const cutoff = month && month < thisMonth ? month : thisMonth;
   const completed = monthlySummary.filter((item) => item.month < cutoff).sort((left, right) => left.month.localeCompare(right.month));
-  const firstMonth = completed[0]?.month;
   const recentNeeds = [];
   const [year, calendarMonth] = cutoff.split('-').map(Number);
-  for (let offset = 3; offset >= 1; offset--) {
+  for (let offset = 3; offset >= 1; offset -= 1) {
     const date = new Date(year, calendarMonth - 1 - offset, 1);
     const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-    if (firstMonth && key >= firstMonth) recentNeeds.push(Number(completed.find((item) => item.month === key)?.needs_expense || 0));
+    const item = completed.find((entry) => entry.month === key);
+    if (amount(item?.needs_expense) > 0) recentNeeds.push(amount(item.needs_expense));
   }
-  const needsBaseline = recentNeeds.length
-    ? recentNeeds.reduce((sum, value) => sum + value, 0) / recentNeeds.length
-    : 0;
-  const availableBalance = Number(summary.availableBalance || 0);
-  const runwayMonths = needsBaseline > 0 ? Math.max(0, availableBalance) / needsBaseline : null;
+  const configuredBaseline = Math.max(0, amount(household.essential_monthly));
+  const observedBaseline = recentNeeds.length ? recentNeeds.reduce((sum, value) => sum + value, 0) / recentNeeds.length : 0;
+  const needsBaseline = configuredBaseline || observedBaseline;
+  const baselineSource = configuredBaseline ? 'estimasi kebutuhan dari Settings' : `rata-rata ${recentNeeds.length} bulan tercatat`;
+  const availableBalance = amount(summary.availableBalance);
+  const balances = goalBalances(goals);
+  const operatingMonths = needsBaseline > 0 ? Math.max(0, availableBalance) / needsBaseline : null;
+  const emergencyMonths = needsBaseline > 0 ? Math.max(0, availableBalance + balances.emergency) / needsBaseline : null;
+  const totalMonths = needsBaseline > 0 ? Math.max(0, availableBalance + balances.total) / needsBaseline : null;
+  const tone = emergencyMonths === null ? 'neutral' : emergencyMonths < 3 ? 'bad' : emergencyMonths < 6 ? 'good' : 'strong';
   const runway = {
-    months: runwayMonths,
+    months: emergencyMonths,
+    operatingMonths,
+    emergencyMonths,
+    totalMonths,
     baseline: needsBaseline,
+    baselineSource,
     observedMonths: recentNeeds.length,
-    tone: runwayMonths === null ? 'neutral' : runwayMonths < 3 ? 'bad' : runwayMonths < 6 ? 'good' : 'strong',
+    emergencyBalance: balances.emergency,
+    totalGoalBalance: balances.total,
+    tone,
   };
   const allocationTone = income === 0
     ? 'neutral'
@@ -71,21 +122,32 @@ export function financialHealth(summary = {}, monthlySummary = [], month, today 
     allocationBasis,
     allocation,
     unallocated,
+    deficit: Math.max(0, -unallocated),
+    cashDeficit: Math.max(0, -amount(summary.cashflow)),
+    savingsRate: income ? savings / income : null,
+    cashRetentionRate: amount(summary.cashInflow) ? amount(summary.cashflow) / amount(summary.cashInflow) : null,
+    netGoalSavings,
+    cashSurplus: amount(summary.cashflow),
     allocationTone,
     runway,
   };
 }
 
-function buildMonthlySummary(transactions) {
+export function buildMonthlySummary(transactions = []) {
   const byMonth = new Map();
   for (const transaction of transactions) {
-    const month = transaction.tx_date.slice(0, 7);
-    const summary = byMonth.get(month) || { month, income: 0, expense: 0, goal_savings: 0, needs_expense: 0 };
-    if (transaction.type === 'income') summary.income += Number(transaction.amount);
+    const month = String(transaction.tx_date || '').slice(0, 7);
+    if (!/^\d{4}-\d{2}$/.test(month)) continue;
+    const summary = byMonth.get(month) || { month, income: 0, goal_withdrawals: 0, cash_inflow: 0, expense: 0, goal_savings: 0, needs_expense: 0 };
+    if (transaction.type === 'income') {
+      if (transaction.goal_id) summary.goal_withdrawals += amount(transaction.amount);
+      else summary.income += amount(transaction.amount);
+      summary.cash_inflow += amount(transaction.amount);
+    }
     if (transaction.type === 'expense') {
-      summary.expense += Number(transaction.amount);
-      if (transaction.goal_id) summary.goal_savings += Number(transaction.amount);
-      if (transaction.need && !transaction.goal_id) summary.needs_expense += Number(transaction.amount);
+      summary.expense += amount(transaction.amount);
+      if (transaction.goal_id) summary.goal_savings += amount(transaction.amount);
+      if (transaction.need && !transaction.goal_id) summary.needs_expense += amount(transaction.amount);
     }
     byMonth.set(month, summary);
   }

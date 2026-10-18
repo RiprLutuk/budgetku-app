@@ -40,6 +40,16 @@ try {
   if (!userCols.includes('status')) db.exec("ALTER TABLE users ADD COLUMN status TEXT NOT NULL DEFAULT 'active'");
   if (!userCols.includes('deleted_at')) db.exec('ALTER TABLE users ADD COLUMN deleted_at TEXT');
   db.exec(fs.readFileSync(path.join(__dirname, 'migrations/0002_superadmin.sql'), 'utf8').replace(/^ALTER TABLE[^\n]+/gm, ''));
+  for (const [table, column, definition] of [
+    ['goals', 'purpose', "TEXT NOT NULL DEFAULT 'general' CHECK(purpose IN ('general','emergency'))"],
+    ['households', 'essential_monthly', 'INTEGER NOT NULL DEFAULT 0 CHECK(essential_monthly>=0)'],
+    ['transactions', 'version', 'INTEGER NOT NULL DEFAULT 0'],
+  ]) {
+    if (!db.prepare(`PRAGMA table_info(${table})`).all().some((item) => item.name === column)) {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    }
+  }
+  db.exec(fs.readFileSync(path.join(__dirname, 'migrations/0003_financial_integrity.sql'), 'utf8').replace(/^ALTER TABLE[^\n]+/gm, ''));
   const superCount = db.prepare("SELECT COUNT(*) AS count FROM users WHERE is_superadmin=1 AND status='active'").get().count;
   if (!superCount) {
     const firstUser = db.prepare('SELECT id FROM users ORDER BY created_at ASC LIMIT 1').get();
