@@ -31,7 +31,9 @@ export async function withPendingForm(form, action) {
   form.setAttribute("aria-busy", "true");
   controls.forEach((control) => { control.disabled = true; });
   try {
-    return await action();
+    const result = await action();
+    form.dispatchEvent(new Event("formsaved", { bubbles: true }));
+    return result;
   } finally {
     controls.forEach((control, index) => { control.disabled = disabled[index]; });
     form.removeAttribute("aria-busy");

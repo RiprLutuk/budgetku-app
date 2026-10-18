@@ -84,7 +84,7 @@ export function renderSettings(container, { snapshot, user, api, toast, onWorksp
       });
     } catch (error) { formMessage(message, error.message, 'bad'); }
   });
-  if (user.is_superadmin) mountGoogleSettings(container, { api, toast });
+  if (user.is_superadmin) return mountGoogleSettings(container, { api, toast });
 }
 
 function mountGoogleSettings(container, { api, toast }) {
@@ -168,5 +168,5 @@ function mountGoogleSettings(container, { api, toast }) {
       updateRequirements();
     } catch (error) { formMessage(message, error.message, 'bad'); }
   };
-  load();
+  return load();
 }

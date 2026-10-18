@@ -1,9 +1,11 @@
-const CACHE = 'budgetku-family-v24-compact-budget';
+const CACHE = 'budgetku-family-v26-compact-goals';
 const ASSETS = [
   '/',
   '/index.html',
   '/app.css',
   '/app.js',
+  '/navigation.js',
+  '/pull-refresh.js',
   '/forms.js',
   '/cashflow.js',
   '/goal-math.js',

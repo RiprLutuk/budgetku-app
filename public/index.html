@@ -49,11 +49,17 @@
               <button id="currentMonthBtn" class="month-nav-reset" type="button" aria-label="Kembali ke bulan ini" title="Kembali ke bulan ini" hidden></button>
             </div>
           </div>
+          <button id="refreshData" class="icon-btn page-refresh-btn" type="button" aria-label="Perbarui data" title="Perbarui data"></button>
           <button id="quickAdd" class="primary icon-label" aria-label="Catat transaksi"><span class="button-icon">＋</span><span class="hide-compact">Transaksi</span></button>
         </div>
       </div>
       <section id="app"></section>
     </main>
+  </div>
+
+  <div id="pullRefresh" class="pull-refresh" role="status" aria-live="polite" aria-atomic="true" data-state="idle" hidden>
+    <span class="pull-refresh-icon" data-pull-icon aria-hidden="true"></span>
+    <span data-pull-label>Tarik untuk memperbarui</span>
   </div>
 
   <dialog id="moreDialog" class="more-dialog" aria-labelledby="moreDialogTitle">

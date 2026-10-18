@@ -6,6 +6,8 @@ import { renderSettings as renderSettingsView } from "./views/settings.js";
 import { createTransactionDialog } from "./components/transaction-dialog.js";
 import { financialHealth, summarizeCashflow } from "./cashflow.js";
 import { renderDashboard as renderDashboardView, renderTransactions as renderTransactionsView } from "./views/dashboard.js";
+import { createNavigation } from "./navigation.js";
+import { createPullRefresh } from "./pull-refresh.js";
 
 let me = null,
   txDialog = null,
@@ -14,6 +16,7 @@ let me = null,
   activeHouseholdId = "",
   pollTimer = null,
   eventSource = null,
+  refreshingView = false,
   snapshotRequestId = 0,
   currentMonth = localDateValue().slice(0, 7),
   followingCurrentMonth = true,
@@ -27,6 +30,9 @@ const monthControl = document.querySelector("#monthControl"),
   monthPicker = document.querySelector("#monthPickerBtn"),
   moreDialog = document.querySelector("#moreDialog"),
   moreButton = document.querySelector(".nav-more");
+const navigation = createNavigation({ getUser: () => me?.user, getCurrentMonth: () => localDateValue().slice(0, 7) });
+const dirtyForms = new WeakSet();
+const refreshButton = document.querySelector("#refreshData");
 const rupiah = (n) =>
   new Intl.NumberFormat("id-ID", {
     style: "currency",
@@ -82,10 +88,13 @@ async function boot() {
       );
       activeHouseholdId = j.householdId;
       pendingJoin = null;
-      history.replaceState({}, "", location.pathname);
+      const url = new URL(location.href);
+      url.searchParams.delete("join");
+      history.replaceState(history.state, "", url);
       me = await api("/api/me");
       toast("Berhasil join household");
     }
+    applyNavigation(navigation.restore());
     await loadSnapshot();
     showApp();
   } catch (e) {
@@ -93,6 +102,7 @@ async function boot() {
   }
 }
 function showAuth() {
+  document.documentElement.classList.remove("pull-refresh-enabled");
   shell.classList.add("hidden");
   authScreen.classList.remove("hidden");
   renderAuth();
@@ -151,14 +161,17 @@ function renderAuth() {
   });
 }
 async function refreshSnapshot(background = false) {
+  if (background && refreshingView) return;
+  if (followingCurrentMonth) currentMonth = localDateValue().slice(0, 7);
   const householdId = activeHouseholdId;
   const requestId = ++snapshotRequestId;
   const next = await api(`/api/snapshot?month=${encodeURIComponent(currentMonth)}`);
   if (householdId !== activeHouseholdId || requestId !== snapshotRequestId) return;
   snapshot = next;
   if (background && isEditing()) return;
+  if (refreshingView && !canRefreshView()) return;
   renderChrome();
-  render();
+  await render();
 }
 async function loadSnapshot() {
   await refreshSnapshot();
@@ -199,6 +212,7 @@ document.addEventListener("visibilitychange", async () => {
   }
 });
 function showApp() {
+  document.documentElement.classList.add("pull-refresh-enabled");
   authScreen.classList.add("hidden");
   shell.classList.remove("hidden");
   renderChrome();
@@ -207,21 +221,19 @@ function showApp() {
 function shiftMonth(offset) {
   const [year, month] = currentMonth.split("-").map(Number);
   const next = new Date(year, month - 1 + offset, 1);
-  currentMonth = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}`;
-  followingCurrentMonth = currentMonth === localDateValue().slice(0, 7);
+  applyNavigation(navigation.save({ view: currentView, month: `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}` }));
   renderChrome();
   render();
   refreshSnapshot().catch((error) => toast(error.message));
 }
 function resetMonth() {
-  followingCurrentMonth = true;
-  currentMonth = localDateValue().slice(0, 7);
+  applyNavigation(navigation.save({ view: currentView }));
   renderChrome();
   render();
+  refreshSnapshot().catch((error) => toast(error.message));
 }
 function renderChrome() {
   if (!me || !snapshot) return;
-  if (followingCurrentMonth) currentMonth = localDateValue().slice(0, 7);
   const household = me.households.find((h) => h.id === snapshot.household.id);
   if (household) household.name = snapshot.household.name;
   document.querySelector("#monthLabel").textContent = new Intl.DateTimeFormat(
@@ -244,7 +256,7 @@ function renderChrome() {
       button.disabled = true;
       try {
         await api("/api/auth/logout", { method: "POST" });
-        location.reload();
+        location.href = "/";
       } catch (error) {
         button.disabled = false;
         toast(error.message);
@@ -275,14 +287,15 @@ function render() {
     users: "Kelola User",
     settings: "Settings",
   }[currentView];
-  if (currentView === "dashboard") renderDashboard();
-  if (currentView === "transactions") renderTransactions();
-  if (currentView === "budget") renderBudget();
-  if (currentView === "goals") renderGoals();
-  if (currentView === "receipts") renderReceipts();
-  if (currentView === "family") renderFamily();
-  if (currentView === "users") renderUsers();
-  if (currentView === "settings") renderSettings();
+  document.title = `${pageTitle.textContent} - BudgetKu`;
+  if (currentView === "dashboard") return renderDashboard();
+  if (currentView === "transactions") return renderTransactions();
+  if (currentView === "budget") return renderBudget();
+  if (currentView === "goals") return renderGoals();
+  if (currentView === "receipts") return renderReceipts();
+  if (currentView === "family") return renderFamily();
+  if (currentView === "users") return renderUsers();
+  if (currentView === "settings") return renderSettings();
 }
 function insightItems(summary = monthCashflow()) {
   const inc = summary.income,
@@ -540,7 +553,7 @@ function renderGoals() {
 function renderReceipts() {
   app.innerHTML = `<div class="content"><div class="grid two"><div class="card"><div class="section-title"><div><h3>Scan nota</h3><p>OCR di browser, foto disimpan ke server setelah kamu review.</p></div></div><div class="receipt-drop"><input id="receiptFile" type="file" accept="image/*" capture="environment"><div id="ocrStatus" class="small muted" style="margin-top:10px">Foto / upload struk. Hasil OCR perlu direview.</div></div></div><div class="card"><div class="section-title"><div><h3>Gmail import</h3><p>Setiap member connect Gmail masing-masing, read-only.</p></div></div><div id="gmailBox">Mengecek...</div></div></div><div class="card" style="margin-top:16px"><h3>Kandidat Gmail</h3><div id="gmailCandidates" class="empty">Belum dimuat.</div></div></div>`;
   document.querySelector("#receiptFile").onchange = handleReceipt;
-  loadGmailStatus();
+  return loadGmailStatus();
 }
 async function fileToDataUrl(file) {
   return await new Promise((resolve, reject) => {
@@ -788,7 +801,7 @@ function openUserDialog(userData = null) {
   dialog.showModal();
 }
 function renderSettings() {
-  renderSettingsView(app, {
+  return renderSettingsView(app, {
     snapshot,
     user: me.user,
     api,
@@ -838,13 +851,70 @@ function bindCommon() {
 }
 function navigate(view) {
   const fromMenu = moreDialog.open;
-  currentView = view;
+  applyNavigation(navigation.save({ view, month: followingCurrentMonth ? null : currentMonth }));
   setMonthPickerOpen(false);
   setMoreOpen(false);
   render();
   window.scrollTo({ top: 0, behavior: "instant" });
   if (fromMenu) pageTitle.focus({ preventScroll: true });
 }
+function applyNavigation(state) {
+  currentView = state.view;
+  currentMonth = state.month;
+  followingCurrentMonth = state.followingCurrentMonth;
+}
+function restoreNavigation() {
+  if (!me || shell.classList.contains("hidden")) return;
+  const state = navigation.restore({ useSaved: false });
+  if (state.view === currentView && state.month === currentMonth) return;
+  const monthChanged = state.month !== currentMonth;
+  applyNavigation(state);
+  setMonthPickerOpen(false);
+  setMoreOpen(false);
+  renderChrome();
+  render();
+  if (monthChanged) refreshSnapshot().catch((error) => toast(error.message));
+}
+window.addEventListener("popstate", restoreNavigation);
+window.addEventListener("hashchange", restoreNavigation);
+for (const eventName of ["input", "change"]) {
+  app.addEventListener(eventName, (event) => {
+    if (event.target.form) dirtyForms.add(event.target.form);
+  });
+}
+app.addEventListener("formsaved", (event) => dirtyForms.delete(event.target));
+app.addEventListener("reset", (event) => dirtyForms.delete(event.target));
+function canRefreshView() {
+  return Boolean(me && snapshot && !shell.classList.contains("hidden")) &&
+    !document.querySelector("dialog[open], .search-select.open") &&
+    !app.querySelector('.budget-content[data-editing="true"], .goal-settings[open], [aria-busy="true"]') &&
+    ![...app.querySelectorAll("form")].some((form) => dirtyForms.has(form)) &&
+    ![...app.querySelectorAll('input[type="file"]')].some((input) => input.files.length);
+}
+const pullRefresh = createPullRefresh({
+  root: shell.querySelector("main"),
+  indicator: document.querySelector("#pullRefresh"),
+  canRefresh: canRefreshView,
+  onRefresh: async () => {
+    refreshingView = true;
+    refreshButton.disabled = true;
+    refreshButton.classList.add("refreshing");
+    try {
+      await refreshSnapshot();
+      if (!eventSource) setupRealtime();
+    } finally {
+      refreshingView = false;
+      refreshButton.disabled = false;
+      refreshButton.classList.remove("refreshing");
+    }
+  },
+});
+refreshButton.innerHTML = icon("refresh");
+document.querySelector("[data-pull-icon]").innerHTML = icon("refresh");
+refreshButton.onclick = () => {
+  if (!canRefreshView()) return toast("Simpan atau batalkan isian dulu sebelum memperbarui.");
+  void pullRefresh.refresh();
+};
 document.querySelectorAll(".nav").forEach((button) => {
   button.onclick = () => navigate(button.dataset.view);
 });
