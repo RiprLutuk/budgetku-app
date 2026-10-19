@@ -18,10 +18,8 @@ function goalStatus(plan) {
 export function renderGoals(container, { snapshot, currentMonth, rupiah, onSaveGoal, onWithdrawGoal, api, toast, refresh }) {
   const goals = snapshot.goals || [];
   const totals = summarizeGoals(goals);
-  const { target: totalTarget, current: totalCurrent } = totals;
-  const totalProgress = goalProgress(totals.funded, totalTarget);
+  const { current: totalCurrent } = totals;
   const monthSavings = Number(snapshot.monthlySummary?.find((item) => item.month === currentMonth)?.goal_savings || 0);
-  const monthLabel = new Intl.DateTimeFormat('id-ID', { month: 'short', year: 'numeric' }).format(new Date(`${currentMonth}-01T00:00:00`));
 
   const renderGoal = (goal) => {
     const progress = goalProgress(goal.current, goal.target);
@@ -41,11 +39,11 @@ export function renderGoals(container, { snapshot, currentMonth, rupiah, onSaveG
   };
 
   container.innerHTML = `<div class="content goals-content">
-    <section class="surface-panel goals-overview" aria-labelledby="goalsTitle">
-      <div class="goals-heading"><div><h2 id="goalsTitle">Tujuan tabungan</h2><span class="goals-count">${totals.active} aktif${totals.completed ? ` · ${totals.completed} tercapai` : ''}</span></div><button id="addGoal" data-add-goal type="button" class="primary goal-add" aria-label="Tambah tujuan tabungan" title="Tambah tujuan">${icon('plus')}<span>Tujuan baru</span></button></div>
-      <div class="goal-kpis"><div><span>Total tersimpan</span><strong>${rupiah(totalCurrent)}</strong><small>Dari target ${rupiah(totalTarget)}</small></div><div><span>Disisihkan ${escapeHtml(monthLabel)}</span><strong>${rupiah(monthSavings)}</strong><small>${totalProgress}% dari seluruh target</small></div></div>
+    <section class="goals-overview" aria-label="Ringkasan tujuan tabungan">
+      <div class="goals-heading"><span class="goals-count">${totals.active} aktif · Tersimpan ${rupiah(totalCurrent)}</span><button id="addGoal" data-add-goal type="button" class="primary goal-add" aria-label="Tambah tujuan tabungan" title="Tambah tujuan">${icon('plus')}<span>Tambah</span></button></div>
+      ${monthSavings > 0 ? `<p class="goals-monthly-note">Setoran ${escapeHtml(new Intl.DateTimeFormat('id-ID', { month: 'short' }).format(new Date(`${currentMonth}-01T00:00:00`)))}: <strong>${rupiah(monthSavings)}</strong></p>` : ''}
     </section>
-    <section class="goals-board" aria-label="Daftar goals"><div class="goal-cards">${goals.length ? goals.map(renderGoal).join('') : `<div class="empty goal-empty"><span>Belum ada goal. Mulai dari dana darurat atau tujuan paling dekat.</span><button type="button" class="secondary" data-add-goal>${icon('plus')}<span>Buat goal pertama</span></button></div>`}</div></section>
+    <section class="list-surface goals-board" aria-label="Daftar goals"><div class="goal-cards">${goals.length ? goals.map(renderGoal).join('') : `<div class="empty goal-empty"><span>Belum ada goal. Mulai dari dana darurat atau tujuan paling dekat.</span><button type="button" class="secondary" data-add-goal>${icon('plus')}<span>Buat goal pertama</span></button></div>`}</div></section>
     <dialog id="goalEditor" aria-labelledby="goalEditorTitle"><form id="goalForm" class="dialog-card form-stack" novalidate><div class="dialog-head"><div><span class="eyebrow">GOAL SETUP</span><h3 id="goalEditorTitle">Tambah goal</h3></div><button type="button" class="icon-btn" data-goal-close aria-label="Tutup dialog" title="Tutup">${icon('close')}</button></div><label for="goalName">Nama goal<input id="goalName" name="name" maxlength="60" placeholder="Dana darurat" required></label><div class="goal-suggestions"><span>Saran cepat</span><div class="goal-suggestion-scroll" aria-label="Pilihan saran goal">${suggestions.map((suggestion) => `<button type="button" class="suggestion-chip" data-suggestion="${escapeHtml(suggestion)}">${escapeHtml(suggestion)}</button>`).join('')}</div></div><div class="form-grid"><label for="goalTarget">Target nominal (Rp)<input id="goalTarget" name="target" class="money-input" inputmode="numeric" autocomplete="off" placeholder="50.000.000" required></label><label for="goalInitial">Saldo awal (Rp)<input id="goalInitial" name="initial_balance" class="money-input" inputmode="numeric" autocomplete="off" value="0" required><span class="field-help">Isi hanya saldo yang sudah ada sebelum dicatat di aplikasi.</span></label></div><label for="goalPurpose">Karakter goal<select id="goalPurpose" name="purpose"><option value="general">Tujuan umum</option><option value="emergency">Dana darurat</option></select><span class="field-help">Dana darurat dipakai khusus untuk menghitung runway perlindungan keluarga.</span></label><label for="goalDate">Target tanggal (opsional)<input id="goalDate" name="target_date" type="date" min="${localDateValue()}"><span id="goalEstimate" class="field-help">Tambahkan tanggal untuk melihat kebutuhan setoran per bulan.</span></label><p id="goalFormMessage" class="form-message" role="status" aria-live="polite" hidden></p><div class="form-footer"><div></div><div class="actions"><button type="button" class="secondary" data-goal-close>Batal</button><button type="submit" class="primary">${icon('check')}<span>Simpan</span></button></div></div></form></dialog>
   </div>`;
 

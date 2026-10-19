@@ -90,6 +90,9 @@ body {
   background: var(--bg);
   font-size: 14px;
   line-height: 1.5;
+  max-width: 100%;
+  overflow-x: clip;
+  overflow-y: auto;
 }
 
 button, input, select, textarea {
@@ -2005,20 +2008,25 @@ body {
   align-items: center;
   gap: 8px;
 }
+.balance-hero-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
 .balance-privacy-anchor {
   display: inline-flex;
 }
 .balance-hero .privacy-toggle {
   display: inline-grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
-  min-width: 28px;
-  min-height: 28px;
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  min-height: 26px;
   padding: 0;
-  border: 1px solid rgba(232, 245, 240, 0.2);
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.08);
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
   color: #d8e7e3;
   box-shadow: none;
 }
@@ -2306,6 +2314,16 @@ button:active {
 .ledger-panel {
   padding-bottom: 9px;
 }
+.ledger-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: var(--action-size);
+  margin-bottom: var(--space-3);
+}
+.ledger-toolbar > div:first-child { display: grid; gap: 1px; }
+.ledger-toolbar small { color: var(--muted); font-size: 11px; }
 .ledger-list {
   display: grid;
 }
@@ -2790,6 +2808,18 @@ button:active {
 }
 
 /* Product shell v2 — one calm, list-first grammar outside the dashboard. */
+#app[data-view] .list-surface {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--surface-radius);
+  padding: var(--surface-padding);
+  box-shadow: none;
+}
+#app[data-view] .page-summary {
+  display: grid;
+  gap: var(--space-3);
+  padding: 2px 0 0;
+}
 #app[data-view] .content:not(.dashboard-content) {
   display: grid;
   gap: var(--space-3);
@@ -2826,9 +2856,9 @@ button:active {
 
 /* Lists own the information hierarchy; cards do not nest inside cards. */
 #app[data-view="goals"] .goals-content { gap: var(--space-3); }
-#app[data-view="goals"] .goals-overview { padding: var(--surface-padding); }
-#app[data-view="goals"] .goals-board { padding: 0; background: transparent; border: 0; }
-#app[data-view="goals"] .goal-cards { gap: 0; overflow: hidden; border: 1px solid var(--border); border-radius: var(--surface-radius); background: var(--card); }
+#app[data-view="goals"] .goals-overview { padding: 2px 0 0; }
+#app[data-view="goals"] .goals-board { padding: 0; }
+#app[data-view="goals"] .goal-cards { gap: 0; overflow: hidden; }
 #app[data-view="goals"] .goal-card { border: 0; border-radius: 0; box-shadow: none; }
 #app[data-view="goals"] .goal-card + .goal-card { border-top: 1px solid var(--border); }
 #app[data-view="transactions"] .ledger-panel,
@@ -3221,6 +3251,20 @@ button:active {
     padding: 16px max(16px, env(safe-area-inset-left, 0px)) calc(16px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-right, 0px));
     border-radius: 22px 22px 0 0;
   }
+}
+
+/* Integration status is a compact state label, not a second heading. */
+.integration-card .section-title {
+  align-items: flex-start;
+}
+
+#googleBadge {
+  flex: 0 0 auto;
+  min-height: 26px;
+  padding: 4px 10px;
+  white-space: nowrap;
+  font-size: 11px;
+  line-height: 1;
 }
 
 /* Visual refinement: calm fintech, softer hierarchy, less admin-console density. */
@@ -3625,9 +3669,10 @@ body {
 }
 
 .auth-heading p {
-  max-width: 25ch;
+  max-width: none;
   margin-top: 6px;
   font-size: 12px;
+  white-space: nowrap;
 }
 
 .auth-form {
@@ -4492,6 +4537,142 @@ body {
   }
 }
 
+/* More menu: a compact native action sheet, not a second navigation page. */
+.more-sheet {
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+}
+
+.more-sheet::before {
+  width: 32px;
+  height: 3px;
+  margin-bottom: 8px;
+}
+
+.more-sheet-head {
+  align-items: center;
+  margin-bottom: 5px;
+}
+
+.more-sheet h2 {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.more-close {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+}
+
+.more-close:hover {
+  background: var(--card-hover);
+  color: var(--dark);
+}
+
+.more-close .icon {
+  width: 18px;
+  height: 18px;
+}
+
+.more-nav-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0;
+}
+
+.more-nav {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) 14px;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 7px 4px;
+  border: 0;
+  border-bottom: 1px solid #e7ece8;
+  border-radius: 0;
+  background: transparent;
+  color: var(--dark);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.more-nav:last-child {
+  border-bottom: 0;
+}
+
+.more-nav .nav-icon,
+.more-nav .icon {
+  width: 18px;
+  height: 18px;
+  color: var(--muted);
+}
+
+.more-nav-arrow {
+  width: 7px;
+  height: 7px;
+  border: solid currentColor;
+  border-width: 0 1.5px 1.5px 0;
+  color: #9aabaa;
+  transform: rotate(-45deg);
+}
+
+.more-nav:hover,
+.more-nav.active {
+  background: transparent;
+  color: var(--primary);
+}
+
+.more-nav:hover .more-nav-arrow,
+.more-nav.active .more-nav-arrow {
+  color: var(--primary);
+}
+
+.more-account {
+  min-height: 46px;
+  margin-top: 7px;
+  padding-top: 9px;
+}
+
+.more-account .side-user-meta {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 8px;
+  align-items: center;
+}
+
+.more-account .side-user-meta b {
+  font-size: 12px;
+}
+
+.more-account .side-user-meta .muted {
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.more-account .side-user-meta .badge-admin {
+  grid-column: 1 / -1;
+  margin-top: 3px;
+}
+
+.more-account .account-logout {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--dark);
+}
+
 /* Savings cards: compact enough to scan three goals without losing the decision data. */
 .goal-card {
   padding: 10px 11px;
@@ -4846,37 +5027,368 @@ body {
   border-top-color: #d6e2dd;
 }
 
-/* Savings list: use breathing room between goals instead of a hard divider. */
-.goal-cards {
-  gap: 9px;
+/* Savings is an action list, not a dashboard inside a dashboard. */
+#app[data-view="goals"] .goals-content {
+  gap: 12px;
+}
+
+#app[data-view="goals"] .goals-overview {
+  display: grid;
+  gap: 4px;
+  padding: 2px 2px 0;
+}
+
+#app[data-view="goals"] .goals-heading {
+  min-height: 40px;
+  margin: 0;
+}
+
+#app[data-view="goals"] .goals-heading h2 {
+  font-size: 19px;
+  line-height: 1.2;
+}
+
+#app[data-view="goals"] .goals-count {
+  margin-top: 3px;
+  font-size: 12px;
+}
+
+#app[data-view="goals"] .goal-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  width: var(--action-size);
+  min-width: var(--action-size);
+  min-height: var(--action-size);
+  height: var(--action-size);
+  padding: 0;
+  border-radius: 10px;
+  font-size: 12px;
+}
+
+#app[data-view="goals"] .goal-add .icon {
+  width: 16px;
+  height: 16px;
+}
+
+#app[data-view="goals"] .goal-add span {
+  display: none;
+}
+
+#app[data-view="goals"] .goals-monthly-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+#app[data-view="goals"] .goals-monthly-note strong {
+  color: var(--primary);
+  font-family: var(--font-data);
+  font-weight: 500;
+}
+
+#app[data-view="goals"] .goals-board {
+  overflow: hidden;
+  padding: 0;
+  border-radius: 16px;
+  background: var(--card);
+}
+
+#app[data-view="goals"] .goal-cards {
+  display: grid;
+  gap: 0;
+  overflow: visible;
   border: 0;
   border-radius: 0;
   background: transparent;
   box-shadow: none;
 }
 
-.goal-card {
-  padding: 11px 12px;
-  border: 1px solid #dce6e1;
-  border-radius: 14px;
-  background: rgba(255, 254, 250, 0.9);
+#app[data-view="goals"] .goal-card {
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
-.goal-card + .goal-card {
+#app[data-view="goals"] .goal-card + .goal-card {
   border-top: 1px solid #dce6e1;
 }
 
-.goal-card-values strong,
-.goal-card-values > div:first-child strong {
-  font-size: 16px;
-  letter-spacing: -0.025em;
+#app[data-view="goals"] .goal-card-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+}
+
+#app[data-view="goals"] .goal-card-icon .icon {
+  width: 15px;
+  height: 15px;
+}
+
+#app[data-view="goals"] .goal-card-identity h3 {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+#app[data-view="goals"] .goal-card-percent {
+  padding-top: 1px;
+  font-size: 12px;
+}
+
+#app[data-view="goals"] .goal-card-values {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 7px;
+}
+
+#app[data-view="goals"] .goal-card-values strong {
+  color: var(--primary);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+#app[data-view="goals"] .goal-card-values span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#app[data-view="goals"] .goal-progress {
+  height: 5px;
+  margin-top: 6px;
+}
+
+#app[data-view="goals"] .goal-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 32px;
+  margin-top: 7px;
+  padding: 0;
+  border: 0;
+}
+
+#app[data-view="goals"] .goal-card-plan {
+  display: block;
+  min-width: 0;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+#app[data-view="goals"] .goal-card-actions {
+  flex-wrap: nowrap;
+  gap: 4px;
+}
+
+#app[data-view="goals"] .goal-card-actions .goal-save,
+#app[data-view="goals"] .goal-more summary {
+  height: 32px;
+  min-height: 32px;
+  border-radius: 8px;
+}
+
+#app[data-view="goals"] .goal-card-actions .goal-save {
+  min-width: 70px;
+  padding-inline: 8px;
+  font-size: 10px;
 }
 
 @media (max-width: 760px) {
-  .goal-cards { gap: 8px; }
-  .goal-card { padding: 10px 11px; }
-  .goal-card-values strong,
-  .goal-card-values > div:first-child strong { font-size: 15px; }
+  #app[data-view="goals"] .goal-card { padding: 10px 12px; }
+}
+
+/* Budget: one decision first, then the categories that need it. */
+#app[data-view="budget"] .budget-content {
+  max-width: 760px;
+}
+
+#app[data-view="budget"] .budget-panel {
+  padding: 16px;
+}
+
+#app[data-view="budget"] .budget-header {
+  align-items: center;
+  padding-bottom: 12px;
+}
+
+#app[data-view="budget"] .budget-header h2 {
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+#app[data-view="budget"] .budget-header p {
+  margin-top: 3px;
+  font-size: 11px;
+}
+
+#app[data-view="budget"] .budget-edit-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 0 10px;
+  border-radius: 9px;
+  font-size: 11px;
+}
+
+#app[data-view="budget"] .budget-edit-trigger .icon {
+  width: 15px;
+  height: 15px;
+}
+
+#app[data-view="budget"] .budget-hero {
+  display: grid;
+  gap: 3px;
+  padding: 0 0 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+#app[data-view="budget"] .budget-hero-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 34px;
+}
+
+#app[data-view="budget"] .budget-hero-top > span,
+#app[data-view="budget"] .budget-hero small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+#app[data-view="budget"] .budget-hero > strong {
+  color: var(--primary);
+  font-family: var(--font-data);
+  font-size: clamp(22px, 6vw, 28px);
+  font-weight: 600;
+  letter-spacing: -0.06em;
+  line-height: 1.1;
+}
+
+#app[data-view="budget"] .budget-hero > strong[data-tone="bad"] {
+  color: var(--bad);
+}
+
+#app[data-view="budget"] .budget-hero small b {
+  color: var(--dark);
+  font-family: var(--font-data);
+  font-weight: 500;
+}
+
+#app[data-view="budget"] .budget-summary {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 11px 0;
+}
+
+#app[data-view="budget"] .budget-summary > div + div {
+  padding-left: 11px;
+  border-left: 1px solid var(--border);
+}
+
+#app[data-view="budget"] .budget-summary strong {
+  font-size: 13px;
+}
+
+#app[data-view="budget"] .budget-plan-status {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: var(--card-hover);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+#app[data-view="budget"] .budget-list-heading {
+  padding: 14px 0 5px;
+  font-size: 13px;
+}
+
+#app[data-view="budget"] .budget-list-heading > span:last-child {
+  font-size: 10px;
+}
+
+#app[data-view="budget"] .budget-item {
+  gap: 6px;
+  padding: 12px 0;
+}
+
+#app[data-view="budget"] .budget-category-name {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+#app[data-view="budget"] .budget-category-share {
+  font-size: 10px;
+}
+
+#app[data-view="budget"] .budget-item-values {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+#app[data-view="budget"] .budget-item-values > strong {
+  color: var(--dark);
+  font-family: var(--font-data);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.04em;
+}
+
+#app[data-view="budget"] .budget-item-values > span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#app[data-view="budget"] .budget-item-values b,
+#app[data-view="budget"] .budget-item-foot strong {
+  color: var(--dark);
+  font-family: var(--font-data);
+  font-weight: 500;
+}
+
+#app[data-view="budget"] .budget-progress {
+  height: 6px;
+}
+
+#app[data-view="budget"] .budget-item-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 10px;
+}
+
+#app[data-view="budget"] .budget-item-foot i {
+  font-style: normal;
+}
+
+#app[data-view="budget"] .budget-footer {
+  display: none;
+}
+
+@media (max-width: 430px) {
+  #app[data-view="budget"] .budget-panel { padding: 14px; }
+  #app[data-view="budget"] .budget-hero > strong { font-size: 22px; }
+  #app[data-view="budget"] .budget-list-heading > span:last-child { max-width: 135px; text-align: right; }
 }
 
 /* Transaction sheet: the chosen flow explains itself before people fill fields. */
@@ -5126,4 +5638,410 @@ label { gap: 4px; font-size: 12px; }
 @media (max-width: 390px) {
   .health-panel .allocation-legend { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .health-panel .runway-compact .runway-detail { white-space: normal; text-align: right; }
+}
+
+/* Month selection belongs to the app, not the browser's inconsistent native picker. */
+.month-picker-trigger {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--action-size);
+  padding: 0 11px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--primary);
+  font-family: var(--font-data);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: capitalize;
+}
+
+.month-picker-trigger::after {
+  width: 13px;
+  height: 13px;
+  margin-left: 8px;
+  border: 1.7px solid currentColor;
+  border-radius: 3px;
+  content: "";
+  box-shadow: inset 0 3px 0 -1.5px currentColor;
+}
+
+.month-picker-trigger:hover,
+.month-picker-trigger:focus-visible {
+  border-color: var(--border);
+  background: var(--card);
+}
+
+dialog.month-dialog {
+  box-sizing: border-box;
+  width: min(calc(100vw - 32px), 430px);
+  max-width: calc(100vw - 32px);
+  margin: auto auto 12px;
+  padding: 0;
+  border: 0;
+  border-radius: 20px 20px 0 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.month-dialog::backdrop {
+  background: rgba(16, 43, 55, 0.4);
+  backdrop-filter: blur(4px);
+}
+
+.month-sheet {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  padding: 10px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  border: 1px solid var(--border);
+  border-bottom: 0;
+  border-radius: 20px 20px 0 0;
+  background: var(--card);
+}
+
+.month-sheet-handle {
+  width: 32px;
+  height: 3px;
+  margin: 0 auto 12px;
+  border-radius: 99px;
+  background: #cad6df;
+}
+
+.month-sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 34px;
+}
+
+.month-sheet-head h2 {
+  margin: 0;
+  color: var(--dark);
+  font-size: 17px;
+  letter-spacing: -0.035em;
+}
+
+.month-sheet-head > #monthDialogClose.icon-btn {
+  box-sizing: border-box;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 26px;
+  font-weight: 300;
+  line-height: 1;
+}
+
+.month-wheel-picker {
+  display: grid;
+  grid-template-columns: 1.25fr 0.75fr;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.month-wheel-picker > section {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.month-wheel-picker > section > span {
+  padding-left: 3px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.month-wheel {
+  display: grid;
+  height: 42px;
+  max-height: 42px;
+  padding: 2px 4px;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card-hover);
+  scrollbar-width: none;
+  scroll-snap-type: y mandatory;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+}
+
+.month-wheel::-webkit-scrollbar { display: none; }
+
+.month-wheel-option {
+  min-height: 38px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dark);
+  font-family: var(--font-data);
+  font-size: 12px;
+  font-weight: 500;
+  scroll-snap-align: center;
+  text-transform: capitalize;
+}
+
+.month-wheel-option:hover {
+  background: var(--card);
+}
+
+.month-wheel-option.is-selected {
+  color: #fff;
+  background: var(--primary);
+  box-shadow: 0 3px 8px rgba(31, 83, 102, 0.14);
+}
+
+.month-sheet-actions {
+  display: grid;
+  grid-template-columns: 1fr 1.3fr;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.month-sheet-actions .primary,
+.month-sheet-actions .secondary {
+  min-height: 38px;
+  justify-content: center;
+  font-size: 11px;
+}
+
+@media (max-width: 560px) {
+  .month-picker-trigger { padding-inline: 7px; font-size: 11px; }
+  .month-picker-trigger::after { margin-left: 6px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .month-dialog { transition: none; }
+}
+
+/* One modal grammar: centered, contained, and scrollable inside the surface. */
+dialog,
+dialog:not(.more-dialog),
+dialog.month-dialog,
+dialog.more-dialog {
+  position: fixed;
+  inset: auto;
+  top: calc(50% - 52px);
+  left: 50%;
+  box-sizing: border-box;
+  width: min(calc(100vw - 32px), 520px);
+  max-width: calc(100vw - 32px);
+  max-height: min(86dvh, 720px);
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--card);
+  box-shadow: 0 20px 60px rgba(16, 43, 55, 0.2);
+  transform: translate(-50%, -50%);
+}
+
+dialog.month-dialog,
+.confirm-dialog {
+  width: min(calc(100% - 28px), 360px);
+  max-width: calc(100% - 28px);
+}
+
+/* Native selects hand scrolling and momentum to the phone OS. The visual
+   treatment stays consistent with the rest of the app without competing with
+   touch gestures inside a custom wheel. */
+select.month-wheel {
+  display: block;
+  width: 100%;
+  height: 40px;
+  min-height: 40px;
+  max-height: none;
+  padding: 1px 30px 1px 10px;
+  appearance: none;
+  -webkit-appearance: none;
+  overflow: visible;
+  color: var(--primary);
+  font-family: var(--font-data);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 38px;
+  text-align: center;
+  text-align-last: center;
+  cursor: pointer;
+  scroll-snap-type: none;
+  touch-action: manipulation;
+}
+
+/* Mobile has one intentional scroller: the content area. This prevents a
+   fixed bottom navigation from trapping page scroll in embedded webviews. */
+@media (max-width: 760px) {
+  html,
+  body {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .app-shell {
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  main {
+    height: 100dvh;
+    min-height: 0;
+    overflow-x: clip;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+dialog::backdrop,
+.month-dialog::backdrop,
+.more-dialog::backdrop {
+  background: rgba(16, 43, 55, 0.46);
+  backdrop-filter: blur(5px);
+}
+
+dialog:not(.more-dialog) .dialog-card {
+  min-height: 0;
+  padding: 16px;
+  border-radius: 19px;
+}
+
+.more-sheet,
+.month-sheet {
+  padding: 16px;
+  border: 0;
+  border-radius: 19px;
+  box-shadow: none;
+}
+
+.more-sheet::before,
+.month-sheet-handle {
+  display: none;
+}
+
+.month-sheet-head {
+  min-height: 32px;
+}
+
+.month-sheet-head h2 {
+  font-size: 16px;
+}
+
+.month-sheet-head > #monthDialogClose.icon-btn {
+  flex-basis: 30px;
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  min-height: 30px;
+  border-radius: 8px;
+}
+
+.month-wheel-picker {
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.month-wheel-picker > section {
+  position: relative;
+}
+
+.month-wheel-chevron {
+  position: absolute;
+  right: 10px;
+  bottom: 13px;
+  width: 16px;
+  height: 16px;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.month-wheel {
+  height: 40px;
+  max-height: 40px;
+  padding: 1px 26px 1px 4px;
+  border-color: var(--border);
+  border-radius: 10px;
+  background: var(--card-hover);
+}
+
+.month-wheel-option {
+  min-height: 38px;
+  border-radius: 8px;
+}
+
+.month-wheel-option.is-selected {
+  color: var(--primary);
+  background: transparent;
+  box-shadow: none;
+}
+
+.month-sheet-actions {
+  margin-top: 14px;
+}
+
+@media (max-width: 760px) {
+  dialog:not(.more-dialog),
+  dialog.month-dialog,
+  dialog.more-dialog {
+    width: min(calc(100vw - 28px), 520px);
+    max-width: calc(100vw - 28px);
+    max-height: min(84dvh, 680px);
+    margin: 0;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    box-shadow: 0 20px 60px rgba(16, 43, 55, 0.2);
+    transform: translate(-50%, -50%);
+  }
+
+  dialog:not(.more-dialog) .dialog-card {
+    padding: 14px;
+    border-radius: 19px;
+  }
+
+  .more-sheet,
+  .month-sheet {
+    padding: 14px;
+    border-radius: 19px;
+  }
+}
+
+/* Keep top-layer dialogs inside the application viewport.  `100vw` includes
+   preview/browser chrome on a few mobile webviews, which creates a phantom
+   horizontal scroll area. */
+html {
+  max-width: 100%;
+  overflow-x: clip;
+  overflow-y: auto;
+}
+
+.app-shell,
+main,
+#app {
+  min-width: 0;
+  max-width: 100%;
+}
+
+dialog,
+dialog:not(.more-dialog),
+dialog.month-dialog,
+dialog.more-dialog {
+  width: min(calc(100% - 28px), 520px);
+  max-width: calc(100% - 28px);
+}
+
+dialog.month-dialog,
+.confirm-dialog {
+  width: min(calc(100% - 28px), 360px);
+  max-width: calc(100% - 28px);
 }

@@ -41,7 +41,8 @@
         </div>
         <div class="page-tools-actions">
           <div id="monthControl" class="month-control">
-            <input id="monthPicker" class="month-picker-input" type="month" aria-label="Pilih bulan" />
+            <button id="monthPickerTrigger" class="month-picker-trigger" type="button" aria-haspopup="dialog" aria-controls="monthDialog"><span>Memuat bulan</span></button>
+            <input id="monthPicker" class="month-picker-input sr-only" type="month" tabindex="-1" aria-hidden="true" />
           </div>
           <button id="togglePrivacy" class="icon-btn privacy-toggle" type="button" aria-label="Sembunyikan nominal" aria-pressed="false" title="Sembunyikan nominal"></button>
           <button id="refreshData" class="icon-btn page-refresh-btn" type="button" aria-label="Perbarui data" title="Perbarui data"></button>
@@ -60,17 +61,26 @@
   <dialog id="moreDialog" class="more-dialog" aria-labelledby="moreDialogTitle">
     <div class="more-sheet">
       <div class="more-sheet-head">
-        <div><span class="page-tools-kicker">RUANG KERJA</span><h2 id="moreDialogTitle">Menu lainnya</h2></div>
+        <div><h2 id="moreDialogTitle">Lainnya</h2></div>
         <button type="button" class="icon-btn more-close" aria-label="Tutup menu" title="Tutup menu" data-icon="close"></button>
       </div>
       <nav class="more-nav-list" aria-label="Menu lainnya">
-        <button data-view="receipts" class="nav more-nav"><span class="nav-icon"></span><span>Nota & Gmail</span></button>
-        <button data-view="family" class="nav more-nav"><span class="nav-icon"></span><span>Keluarga</span></button>
-        <button data-view="users" class="nav admin-only more-nav hidden"><span class="nav-icon"></span><span>Kelola User</span></button>
-        <button data-view="settings" class="nav more-nav"><span class="nav-icon"></span><span>Pengaturan</span></button>
+        <button data-view="receipts" class="nav more-nav"><span class="nav-icon"></span><span>Nota & Gmail</span><span class="more-nav-arrow" aria-hidden="true"></span></button>
+        <button data-view="family" class="nav more-nav"><span class="nav-icon"></span><span>Keluarga</span><span class="more-nav-arrow" aria-hidden="true"></span></button>
+        <button data-view="users" class="nav admin-only more-nav hidden"><span class="nav-icon"></span><span>Kelola User</span><span class="more-nav-arrow" aria-hidden="true"></span></button>
+        <button data-view="settings" class="nav more-nav"><span class="nav-icon"></span><span>Pengaturan</span><span class="more-nav-arrow" aria-hidden="true"></span></button>
       </nav>
       <div class="more-account" id="moreUser"></div>
     </div>
+  </dialog>
+
+  <dialog id="monthDialog" class="month-dialog" aria-labelledby="monthDialogTitle">
+    <section class="month-sheet">
+      <div class="month-sheet-handle" aria-hidden="true"></div>
+      <header class="month-sheet-head"><h2 id="monthDialogTitle">Pilih periode</h2><button id="monthDialogClose" class="icon-btn" type="button" aria-label="Tutup pilihan bulan">×</button></header>
+      <div class="month-wheel-picker" aria-label="Pilih bulan dan tahun"><section><span>Bulan</span><select id="monthWheelMonths" class="month-wheel" aria-label="Bulan"></select><svg class="month-wheel-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 10 5-5 5 5M7 14l5 5 5-5"/></svg></section><section><span>Tahun</span><select id="monthWheelYears" class="month-wheel" aria-label="Tahun"></select><svg class="month-wheel-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 10 5-5 5 5M7 14l5 5 5-5"/></svg></section></div>
+      <div class="month-sheet-actions"><button id="monthDialogToday" class="secondary" type="button">Bulan ini</button><button id="monthDialogApply" class="primary" type="button">Pakai periode</button></div>
+    </section>
   </dialog>
 
   <dialog id="txDialog" aria-labelledby="txDialogTitle">

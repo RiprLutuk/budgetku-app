@@ -4,7 +4,7 @@ import { escapeHtml, icon } from '../ui.js';
 import { confirmDialog } from '../dialogs.js';
 
 function googleCard() {
-  return `<section class="card integration-card" aria-labelledby="googleTitle">
+  return `<section class="list-surface integration-card" aria-labelledby="googleTitle">
     <div class="section-title"><div><h3 id="googleTitle">Integrasi Gmail</h3><p>Atur sekali, lalu setiap pengguna menghubungkan akun Gmail masing-masing.</p></div><span id="googleBadge" class="pill">Memuat</span></div>
     <form id="googleSettingsForm" class="form-stack" novalidate>
       <fieldset class="form-grid" disabled>
@@ -24,7 +24,7 @@ function googleCard() {
 export function renderSettings(container, { snapshot, user, api, toast, onWorkspaceSaved }) {
   const owner = snapshot.household.role === 'owner';
   container.innerHTML = `<div class="content"><div class="settings-grid">
-    <section class="card" aria-labelledby="workspaceTitle">
+    <section class="list-surface" aria-labelledby="workspaceTitle">
       <div class="section-title"><div><h3 id="workspaceTitle">Workspace keluarga</h3><p>Satu ruang bersama untuk seluruh catatan keuangan.</p></div></div>
       <form id="workspaceSettingsForm" class="form-stack" novalidate>
         <fieldset class="form-stack" ${owner ? '' : 'disabled'}>
@@ -38,7 +38,7 @@ export function renderSettings(container, { snapshot, user, api, toast, onWorksp
         <div class="form-footer"><p class="form-message muted" role="status" aria-live="polite">${owner ? '' : 'Hanya pemilik workspace yang dapat mengubah pengaturan.'}</p><button class="primary" type="submit" ${owner ? '' : 'disabled'}>${icon('check')}<span>Simpan</span></button></div>
       </form>
     </section>
-    <section class="card" aria-labelledby="securityTitle">
+    <section class="list-surface" aria-labelledby="securityTitle">
       <div class="section-title"><div><h3 id="securityTitle">Keamanan akun</h3><p>Gunakan password yang berbeda dari akun lainnya.</p></div></div>
       <form id="changePasswordForm" class="form-stack" novalidate>
         <label>Password saat ini<input name="currentPassword" type="password" autocomplete="current-password" required></label>

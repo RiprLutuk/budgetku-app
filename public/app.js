@@ -32,6 +32,8 @@ const app = document.querySelector("#app"),
   pageTitle = document.querySelector("#pageTitle");
 const monthControl = document.querySelector("#monthControl"),
   monthPicker = document.querySelector("#monthPicker"),
+  monthPickerTrigger = document.querySelector("#monthPickerTrigger"),
+  monthDialog = document.querySelector("#monthDialog"),
   moreDialog = document.querySelector("#moreDialog"),
   moreButton = document.querySelector(".nav-more");
 const navigation = createNavigation({ getUser: () => me?.user, getCurrentMonth: () => localDateValue().slice(0, 7) });
@@ -227,6 +229,8 @@ function renderChrome() {
   const monthName = new Intl.DateTimeFormat("id-ID", { month: "long", year: "numeric" }).format(new Date(`${currentMonth}-01T00:00:00`));
   monthPicker.value = currentMonth;
   monthPicker.setAttribute("aria-label", `Pilih bulan, ${monthName}`);
+  monthPickerTrigger.querySelector("span").textContent = monthName;
+  monthPickerTrigger.setAttribute("aria-label", `Pilih bulan, ${monthName}`);
   document.querySelectorAll(".admin-only").forEach((el) => {
     el.classList.toggle("hidden", !me.user.is_superadmin);
   });
@@ -371,6 +375,20 @@ function renderBudget() {
     .filter((transaction) => !categoryIds.has(transaction.category_id))
     .reduce((sum, transaction) => sum + Number(transaction.amount), 0);
   const share = (value) => new Intl.NumberFormat("id-ID", { maximumFractionDigits: 2 }).format(value);
+  const spentForCategory = (categoryId) => expenses
+    .filter((transaction) => transaction.category_id === categoryId)
+    .reduce((sum, transaction) => sum + Number(transaction.amount), 0);
+  const orderedCategories = [...snapshot.categories].sort((left, right) => {
+    const score = (category) => {
+      const limit = income * Number(category.pct || 0) / 100;
+      const spent = spentForCategory(category.id);
+      if (spent > limit && spent > 0) return 0;
+      if (limit <= 0 && spent > 0) return 1;
+      if (limit > 0 && spent / limit >= 0.8) return 2;
+      return 3;
+    };
+    return score(left) - score(right) || left.name.localeCompare(right.name, "id");
+  });
   const renderItem = (category, spent, editable = true) => `<article class="budget-item" ${editable ? `data-id="${esc(category.id)}"` : ""} data-spent="${spent}">
     <div class="budget-item-head">
       <h3 class="budget-category-name">${esc(category.name)}</h3>
@@ -378,42 +396,33 @@ function renderBudget() {
       ${editable ? `<input class="budget-name-input cat-name" value="${esc(category.name)}" aria-label="Nama pos ${esc(category.name)}" maxlength="60" required disabled>
       <label class="budget-pct-input"><input class="cat-pct" type="number" inputmode="decimal" min="0" max="100" step="any" value="${Number(category.pct)}" aria-label="Persentase ${esc(category.name)}" required disabled><span aria-hidden="true">%</span></label>` : ""}
     </div>
-    <div class="budget-item-values">
-      <div><small>Alokasi</small><strong data-budget-limit></strong></div>
-      <div><small>Terpakai</small><strong>${rupiah(spent)}</strong></div>
-      <div class="budget-item-balance"><small data-budget-balance-label>Sisa</small><strong data-budget-remaining></strong></div>
-    </div>
+    <div class="budget-item-values"><strong>${rupiah(spent)}</strong><span>terpakai dari <b data-budget-limit></b></span></div>
     <div class="budget-progress" role="progressbar" aria-label="Pemakaian ${esc(category.name)}" aria-valuemin="0" aria-valuemax="100"><span></span></div>
-    <div class="budget-item-foot"><span data-budget-progress></span><span data-budget-state></span></div>
+    <div class="budget-item-foot"><span><i data-budget-balance-label>Sisa</i> <strong data-budget-remaining></strong></span><span data-budget-state></span><span class="sr-only" data-budget-progress></span></div>
   </article>`;
 
   app.innerHTML = `<div class="content budget-content" data-editing="false">
-    <form id="budgetForm" class="surface-panel budget-panel" aria-labelledby="budgetTitle" novalidate>
-      <header class="budget-header">
-        <div>
-          <h2 id="budgetTitle">Alokasi pemasukan</h2>
-          <p>Rencana, pemakaian, dan ruang tiap pos.</p>
-        </div>
-        <button id="editBudget" class="icon-btn" type="button" aria-label="Ubah alokasi budget" title="Ubah alokasi budget" ${snapshot.categories.length ? "" : "disabled"}>${icon("edit")}</button>
+    <form id="budgetForm" class="list-surface budget-panel" aria-label="Anggaran bulan ini" novalidate>
+      <section class="budget-hero" aria-label="Uang siap dibelanjakan">
+        <div class="budget-hero-top"><span>Siap dibelanjakan</span>
+        <button id="editBudget" class="secondary budget-edit-trigger" type="button" aria-label="Atur alokasi budget" title="Atur alokasi budget" ${snapshot.categories.length ? "" : "disabled"}>${icon("edit")}<span>Atur</span></button>
         <div class="budget-edit-actions" hidden>
           <button id="cancelBudget" class="icon-btn" type="button" aria-label="Batalkan perubahan budget" title="Batalkan perubahan">${icon("close")}</button>
           <button id="saveBudget" class="icon-btn budget-save" type="submit" aria-label="Simpan budget" title="Simpan budget">${icon("check")}</button>
-        </div>
-      </header>
+        </div></div>
+        <strong data-budget-total-remaining></strong>
+        <small><b>${rupiah(totalSpent)}</b> terpakai dari <b data-budget-allocated></b> dialokasikan</small>
+      </section>
       <div class="budget-summary" aria-label="Ringkasan budget">
         <div><span>Pemasukan</span><strong>${rupiah(income)}</strong><small>${incomeBasis}</small></div>
-        <div><span>Dialokasikan</span><strong data-budget-allocated></strong><small data-budget-total-pct></small></div>
-        <div><span>Terpakai</span><strong>${rupiah(totalSpent)}</strong><small>${expenses.some((transaction) => transaction.goal_id) ? "termasuk setoran goals" : "belanja bulan ini"}</small></div>
-        <div><span>Sisa budget</span><strong data-budget-total-remaining></strong><small>alokasi dikurangi pemakaian</small></div>
+        <div><span>Alokasi</span><strong data-budget-allocated></strong><small data-budget-total-pct></small></div>
       </div>
       <p class="budget-plan-status" data-budget-plan-status role="status"></p>
       <p class="budget-alert" data-budget-alert hidden></p>
       <p class="budget-error" id="budgetError" role="alert" hidden></p>
-      <div class="budget-list-heading"><span>Pos anggaran</span><span>${snapshot.categories.length} pos</span></div>
+      <div class="budget-list-heading"><span>Pos anggaran</span><span>${snapshot.categories.length} pos · prioritas di atas</span></div>
       <div class="budget-list">
-        ${snapshot.categories.map((category) => renderItem(category, expenses
-          .filter((transaction) => transaction.category_id === category.id)
-          .reduce((sum, transaction) => sum + Number(transaction.amount), 0))).join("")}
+        ${orderedCategories.map((category) => renderItem(category, spentForCategory(category.id))).join("")}
         ${uncategorized ? renderItem({ name: "Tanpa kategori", pct: 0 }, uncategorized, false) : ""}
         ${snapshot.categories.length || uncategorized ? "" : '<p class="empty">Belum ada pos anggaran.</p>'}
       </div>
@@ -434,7 +443,7 @@ function renderBudget() {
     const currentTotalPct = readCategories().reduce((sum, category) => sum + category.pct, 0);
     const currentAllocated = (income * currentTotalPct) / 100;
     const remaining = currentAllocated - totalSpent;
-    form.querySelector("[data-budget-allocated]").textContent = rupiah(currentAllocated);
+    form.querySelectorAll("[data-budget-allocated]").forEach((element) => { element.textContent = rupiah(currentAllocated); });
     form.querySelector("[data-budget-total-pct]").textContent = `${share(currentTotalPct)}% pemasukan`;
     const remainingValue = form.querySelector("[data-budget-total-remaining]");
     remainingValue.textContent = rupiah(remaining);
@@ -556,7 +565,7 @@ function renderGoals() {
   });
 }
 function renderReceipts() {
-  app.innerHTML = `<div class="content utilities-content receipts-content"><section class="card utility-card receipt-card"><div class="section-title"><div><h3>Scan nota</h3><p>Ambil foto atau unggah struk. Kamu tetap meninjau hasilnya sebelum transaksi dibuat.</p></div></div><div class="receipt-drop"><input id="receiptFile" class="receipt-input" type="file" accept="image/*" capture="environment"><label for="receiptFile" class="receipt-upload">${icon("receipt")}<span>Pilih foto nota</span></label><div id="ocrStatus" class="small muted">Foto struk akan dibaca di perangkat ini.</div></div></section><section class="card utility-card gmail-card"><div class="section-title"><div><h3>Impor Gmail</h3><p>Hubungkan Gmail pribadi untuk mencari bukti transaksi. Akses hanya-baca.</p></div></div><div id="gmailBox" class="utility-action">Mengecek...</div></section><section class="card utility-card candidates-card"><div class="section-title"><div><h3>Kandidat Gmail</h3><p>Transaksi yang ditemukan akan muncul di sini untuk ditinjau.</p></div></div><div id="gmailCandidates" class="empty">Belum ada kandidat untuk ditinjau.</div></section></div>`;
+  app.innerHTML = `<div class="content utilities-content receipts-content"><section class="list-surface utility-card receipt-card"><div class="section-title"><div><h3>Scan nota</h3><p>Ambil foto atau unggah struk. Kamu tetap meninjau hasilnya sebelum transaksi dibuat.</p></div></div><div class="receipt-drop"><input id="receiptFile" class="receipt-input" type="file" accept="image/*" capture="environment"><label for="receiptFile" class="receipt-upload">${icon("receipt")}<span>Pilih foto nota</span></label><div id="ocrStatus" class="small muted">Foto struk akan dibaca di perangkat ini.</div></div></section><section class="list-surface utility-card gmail-card"><div class="section-title"><div><h3>Impor Gmail</h3><p>Hubungkan Gmail pribadi untuk mencari bukti transaksi. Akses hanya-baca.</p></div></div><div id="gmailBox" class="utility-action">Mengecek...</div></section><section class="list-surface utility-card candidates-card"><div class="section-title"><div><h3>Kandidat Gmail</h3><p>Transaksi yang ditemukan akan muncul di sini untuk ditinjau.</p></div></div><div id="gmailCandidates" class="empty">Belum ada kandidat untuk ditinjau.</div></section></div>`;
   document.querySelector("#receiptFile").onchange = handleReceipt;
   return loadGmailStatus();
 }
@@ -661,7 +670,7 @@ async function scanGmail() {
   }
 }
 function renderFamily() {
-  app.innerHTML = `<div class="content utilities-content family-content"><section class="card utility-card members-card"><div class="section-title"><div><h3>Anggota keluarga</h3><p>${esc(snapshot.household.name)}</p></div><span class="panel-count">${snapshot.members.length}</span></div><div class="member-list">${snapshot.members.map((m) => `<div class="member-row"><span class="member-avatar" aria-hidden="true">${esc((m.name || "?").trim().slice(0, 1).toUpperCase())}</span><div class="member-copy"><b>${esc(m.name)}</b><span>${esc(m.email)}</span></div><span class="pill">${esc(m.role)}</span></div>`).join("")}</div></section><section class="card utility-card invite-card"><div class="section-title"><div><h3>Undang pasangan</h3><p>Tautan aman dan berlaku selama 7 hari.</p></div></div>${snapshot.household.role === "owner" ? `<button id="makeInvite" class="primary">${icon("plus")}<span>Buat tautan undangan</span></button><div id="inviteBox"></div>` : `<div class="insight">Hanya pemilik keluarga yang dapat membuat undangan.</div>`}</section></div>`;
+  app.innerHTML = `<div class="content utilities-content family-content"><section class="list-surface utility-card members-card"><div class="section-title"><div><h3>Anggota keluarga</h3><p>${esc(snapshot.household.name)}</p></div><span class="panel-count">${snapshot.members.length}</span></div><div class="member-list">${snapshot.members.map((m) => `<div class="member-row"><span class="member-avatar" aria-hidden="true">${esc((m.name || "?").trim().slice(0, 1).toUpperCase())}</span><div class="member-copy"><b>${esc(m.name)}</b><span>${esc(m.email)}</span></div><span class="pill">${esc(m.role)}</span></div>`).join("")}</div></section><section class="list-surface utility-card invite-card"><div class="section-title"><div><h3>Undang pasangan</h3><p>Tautan aman dan berlaku selama 7 hari.</p></div></div>${snapshot.household.role === "owner" ? `<button id="makeInvite" class="primary">${icon("plus")}<span>Buat tautan undangan</span></button><div id="inviteBox"></div>` : `<div class="insight">Hanya pemilik keluarga yang dapat membuat undangan.</div>`}</section></div>`;
   document.querySelector("#makeInvite")?.addEventListener("click", async () => {
     const d = await api("/api/invites", { method: "POST" }),
       url = `${location.origin}${d.joinPath}`;
@@ -675,10 +684,10 @@ function renderFamily() {
 }
 async function renderUsers() {
   if (!me.user.is_superadmin) {
-    app.innerHTML = `<div class="content"><div class="card"><div class="insight bad">Akses ditolak. Halaman ini hanya untuk superadmin.</div></div></div>`;
+    app.innerHTML = `<div class="content"><div class="list-surface"><div class="insight bad">Akses ditolak. Halaman ini hanya untuk superadmin.</div></div></div>`;
     return;
   }
-  app.innerHTML = `<div class="content users-content"><section class="card users-panel"><div class="section-title users-heading"><div><h3>Kelola user</h3><p>Atur akun dan hak akses keluarga.</p></div><button id="addUserBtn" class="primary"><span class="button-icon">${icon("plus")}</span><span>Tambah</span></button></div><div id="usersContainer" class="empty">Memuat daftar user...</div></section></div>`;
+  app.innerHTML = `<div class="content users-content"><section class="list-surface users-panel"><div class="section-title users-heading"><div><h3>Kelola user</h3><p>Atur akun dan hak akses keluarga.</p></div><button id="addUserBtn" class="primary"><span class="button-icon">${icon("plus")}</span><span>Tambah</span></button></div><div id="usersContainer" class="empty">Memuat daftar user...</div></section></div>`;
   document.querySelector("#addUserBtn").onclick = () => openUserDialog();
   await loadUsersList();
 }
@@ -886,10 +895,14 @@ const pullRefresh = createPullRefresh({
     refreshingView = true;
     refreshButton.disabled = true;
     refreshButton.classList.add("refreshing");
+    const refreshStartedAt = performance.now();
     try {
       await refreshSnapshot();
       if (!eventSource) setupRealtime();
     } finally {
+      // Keep the feedback visible when a local/cache response is nearly instant.
+      const remainingFeedback = Math.max(0, 420 - (performance.now() - refreshStartedAt));
+      if (remainingFeedback) await new Promise((resolve) => setTimeout(resolve, remainingFeedback));
       refreshingView = false;
       refreshButton.disabled = false;
       refreshButton.classList.remove("refreshing");
@@ -926,14 +939,51 @@ moreDialog.addEventListener("close", () => {
 window.matchMedia("(max-width: 760px)").addEventListener("change", () => {
   setMoreOpen(false);
 });
-monthPicker.addEventListener("change", () => {
-  const month = monthPicker.value;
+function selectMonth(month) {
   if (!/^\d{4}-\d{2}$/.test(month) || month === currentMonth) return;
   applyNavigation(navigation.save({ view: currentView, month }));
   renderChrome();
   render();
   refreshSnapshot().catch((error) => toast(error.message));
-});
+}
+
+const monthNames = Array.from({ length: 12 }, (_, index) => new Intl.DateTimeFormat("id-ID", { month: "short" }).format(new Date(2026, index, 1)));
+let monthDialogSelection = { year: Number(currentMonth.slice(0, 4)), month: Number(currentMonth.slice(5, 7)) };
+const renderMonthDialog = () => {
+  const thisYear = Number(localDateValue().slice(0, 4));
+  const years = Array.from({ length: 11 }, (_, index) => thisYear - 5 + index);
+  if (!years.includes(monthDialogSelection.year)) years.push(monthDialogSelection.year);
+  years.sort((left, right) => left - right);
+  const months = monthDialog.querySelector("#monthWheelMonths");
+  const yearsSelect = monthDialog.querySelector("#monthWheelYears");
+  months.innerHTML = monthNames.map((name, index) => `<option value="${index + 1}">${name}</option>`).join("");
+  yearsSelect.innerHTML = years.map((year) => `<option value="${year}">${year}</option>`).join("");
+  months.value = String(monthDialogSelection.month);
+  yearsSelect.value = String(monthDialogSelection.year);
+  months.onchange = () => { monthDialogSelection.month = Number(months.value); };
+  yearsSelect.onchange = () => { monthDialogSelection.year = Number(yearsSelect.value); };
+};
+
+monthPickerTrigger.onclick = () => {
+  monthDialogSelection = { year: Number(currentMonth.slice(0, 4)), month: Number(currentMonth.slice(5, 7)) };
+  renderMonthDialog();
+  monthDialog.showModal();
+};
+monthDialog.querySelector("#monthDialogClose").onclick = () => monthDialog.close();
+monthDialog.querySelector("#monthDialogToday").onclick = () => {
+  const month = localDateValue().slice(0, 7);
+  monthDialog.close();
+  monthPicker.value = month;
+  selectMonth(month);
+};
+monthDialog.querySelector("#monthDialogApply").onclick = () => {
+  const month = `${monthDialogSelection.year}-${String(monthDialogSelection.month).padStart(2, "0")}`;
+  monthDialog.close();
+  monthPicker.value = month;
+  selectMonth(month);
+};
+monthDialog.addEventListener("click", (event) => { if (!event.target.closest(".month-sheet")) monthDialog.close(); });
+monthPicker.addEventListener("change", () => selectMonth(monthPicker.value));
 document.querySelector("#quickAdd").onclick = () => {
   monthPicker.blur();
   openTx();

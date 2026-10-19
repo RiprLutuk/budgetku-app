@@ -5,6 +5,7 @@ export function createPullRefresh({ root, indicator, canRefresh, onRefresh }) {
   let distance = 0;
   let refreshing = false;
   let hideTimer;
+  const scrollTop = () => Math.max(root.scrollTop || 0, document.scrollingElement?.scrollTop || 0);
 
   function hide() {
     clearTimeout(hideTimer);
@@ -49,7 +50,7 @@ export function createPullRefresh({ root, indicator, canRefresh, onRefresh }) {
   }
   function start(event) {
     hide();
-    if (refreshing || event.touches.length !== 1 || !canRefresh() || (document.scrollingElement?.scrollTop || 0) > 1 || (window.visualViewport?.scale || 1) > 1.01) return;
+    if (refreshing || event.touches.length !== 1 || !canRefresh() || scrollTop() > 1 || (window.visualViewport?.scale || 1) > 1.01) return;
     const target = event.target;
     if (target.closest("input, textarea, select, button, a, label, summary, [contenteditable]:not([contenteditable='false']), [role='slider']") || nestedScroller(target)) return;
     const touch = event.touches[0];
@@ -57,7 +58,7 @@ export function createPullRefresh({ root, indicator, canRefresh, onRefresh }) {
   }
   function move(event) {
     if (!gesture) return;
-    if (event.touches.length !== 1 || !canRefresh() || (document.scrollingElement?.scrollTop || 0) > 1) return hide();
+    if (event.touches.length !== 1 || !canRefresh() || scrollTop() > 1) return hide();
     const touch = [...event.touches].find((item) => item.identifier === gesture.id);
     if (!touch) return hide();
     const vertical = touch.clientY - gesture.y;
