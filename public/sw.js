@@ -1,4 +1,4 @@
-const CACHE = 'budgetku-family-v40-consistent-prompts-assets';
+const CACHE = 'budgetku-family-v41-unified-page-grammar-assets';
 const ASSETS = [
   '/',
   '/index.html',

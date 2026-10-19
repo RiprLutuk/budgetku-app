@@ -2789,6 +2789,74 @@ button:active {
   .month-nav-reset { padding-inline: 5px; }
 }
 
+/* Product shell v2 — one calm, list-first grammar outside the dashboard. */
+#app[data-view] .content:not(.dashboard-content) {
+  display: grid;
+  gap: var(--space-3);
+  align-content: start;
+}
+#app[data-view] .content:not(.dashboard-content) > .card,
+#app[data-view] .content:not(.dashboard-content) > .surface-panel,
+#app[data-view] .content:not(.dashboard-content) .settings-grid > .card,
+#app[data-view] .content:not(.dashboard-content) .utilities-content > .utility-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--surface-radius);
+  box-shadow: none;
+}
+#app[data-view] .section-title,
+#app[data-view] .panel-heading,
+#app[data-view] .goals-heading,
+#app[data-view] .budget-header {
+  min-height: 32px;
+  margin-bottom: var(--space-3);
+}
+#app[data-view] .section-title h3,
+#app[data-view] .panel-heading h3,
+#app[data-view] .goals-heading h2,
+#app[data-view] .budget-header h2 {
+  color: var(--dark);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+}
+#app[data-view] .section-title p,
+#app[data-view] .panel-heading small,
+#app[data-view] .goals-heading .goals-count,
+#app[data-view] .budget-header p { color: var(--muted); }
+
+/* Lists own the information hierarchy; cards do not nest inside cards. */
+#app[data-view="goals"] .goals-content { gap: var(--space-3); }
+#app[data-view="goals"] .goals-overview { padding: var(--surface-padding); }
+#app[data-view="goals"] .goals-board { padding: 0; background: transparent; border: 0; }
+#app[data-view="goals"] .goal-cards { gap: 0; overflow: hidden; border: 1px solid var(--border); border-radius: var(--surface-radius); background: var(--card); }
+#app[data-view="goals"] .goal-card { border: 0; border-radius: 0; box-shadow: none; }
+#app[data-view="goals"] .goal-card + .goal-card { border-top: 1px solid var(--border); }
+#app[data-view="transactions"] .ledger-panel,
+#app[data-view="budget"] .budget-panel,
+#app[data-view="users"] .users-panel { box-shadow: none; }
+#app[data-view="receipts"] .utility-card,
+#app[data-view="family"] .utility-card,
+#app[data-view="settings"] .card { box-shadow: none; }
+
+/* A predictable action hierarchy: one filled CTA, all other actions quiet. */
+#app[data-view] .panel-actions .primary,
+#app[data-view] .section-title .primary,
+#app[data-view] .goals-heading .primary { min-height: 36px; }
+#app[data-view] .text-action { min-height: 32px; padding-inline: 4px; }
+#app[data-view] .icon-btn { width: var(--action-size); height: var(--action-size); }
+
+@media (max-width: 700px) {
+  #app[data-view] .content:not(.dashboard-content) { gap: 10px; }
+  #app[data-view] .section-title,
+  #app[data-view] .panel-heading,
+  #app[data-view] .goals-heading,
+  #app[data-view] .budget-header { margin-bottom: 10px; }
+  #app[data-view="goals"] .goal-card { padding-inline: var(--surface-padding); }
+  #app[data-view="settings"] .settings-grid { gap: 10px; }
+  #app[data-view="receipts"] .utilities-content,
+  #app[data-view="family"] .utilities-content { gap: 10px; }
+}
+
 .page-tools {
   display: flex;
   align-items: center;
