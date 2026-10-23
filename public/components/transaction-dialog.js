@@ -193,9 +193,10 @@ export function createTransactionDialog({ dialog, getSnapshot, save, onDelete, o
       fields.source.value = prefill.source || 'manual';
       fields.receiptUrl.value = prefill.receiptUrl || prefill.receipt_url || '';
       fields.externalRef.value = prefill.externalRef || prefill.external_ref || (editingId ? '' : `manual:${crypto.randomUUID()}`);
+      const goalCategoryIds = new Set(data.goals.map((goalItem) => categoryForGoal(goalItem.id)?.id).filter(Boolean));
       category = searchableSelect(form.querySelector('#categorySelect'), {
         name: 'category', label: 'Kategori', inputId: 'txCategory',
-        options: [{ value: '', label: 'Tanpa kategori' }, ...data.categories.map((item) => ({ value: item.id, label: item.name }))],
+        options: [{ value: '', label: 'Tanpa kategori' }, ...data.categories.map((item) => ({ value: item.id, label: item.name, hidden: goalCategoryIds.has(item.id) }))],
         value: prefill.categoryId ?? prefill.category_id ?? categoryForGoal(prefill.goalId ?? prefill.goal_id)?.id ?? data.categories[0]?.id ?? '',
         onChange: () => { syncGoal(); syncType(); },
       });

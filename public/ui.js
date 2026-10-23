@@ -80,6 +80,8 @@ window.visualViewport?.addEventListener('scroll', repositionOpenedSelect);
 export function searchableSelect(host, { name, label, options, value = '', inputId, describedBy, onChange = () => {} }) {
   host.selectControl?.destroy();
   const identifier = `suggest-${++selectId}`;
+  const items = options;
+  let selected = String(value);
   host.classList.add('search-select');
 
   // A fixed popover and an input blur race on touch devices: tapping an option
@@ -87,31 +89,50 @@ export function searchableSelect(host, { name, label, options, value = '', input
   // on compact screens so the control remains reliably selectable and
   // navigable with touch, keyboard, and assistive technology.
   if (window.matchMedia('(max-width: 760px)').matches) {
-    const selected = String(value);
     host.innerHTML = `<select class="search-select-native"></select>`;
     const select = host.querySelector('select');
     select.name = name;
     select.id = inputId || identifier;
     select.setAttribute('aria-label', label);
     if (describedBy) select.setAttribute('aria-describedby', describedBy);
-    for (const item of options) {
+    for (const item of items.filter((item) => !item.hidden)) {
       const option = document.createElement('option');
       option.value = String(item.value);
       option.textContent = item.label;
       option.selected = option.value === selected;
       select.append(option);
     }
+    const display = () => {
+      select.querySelector('[data-hidden-selection]')?.remove();
+      if ([...select.options].some((option) => option.value === selected)) {
+        select.value = selected;
+        return;
+      }
+      const item = items.find((candidate) => String(candidate.value) === selected);
+      if (!item) return;
+      const proxy = document.createElement('option');
+      proxy.dataset.hiddenSelection = 'true';
+      proxy.value = '__hidden-selection__';
+      proxy.textContent = item.label;
+      proxy.disabled = true;
+      proxy.selected = true;
+      select.prepend(proxy);
+    };
+    display();
     const control = {
       host,
-      get value() { return select.value; },
-      set value(next) { select.value = String(next ?? ''); },
+      get value() { return selected; },
+      set value(next) { selected = String(next ?? ''); display(); },
       open() { select.focus(); },
       close() {},
       position() {},
       setDisabled(disabled) { select.disabled = disabled; },
       destroy() { delete host.selectControl; },
     };
-    select.addEventListener('change', () => onChange(select.value));
+    select.addEventListener('change', () => {
+      selected = select.value;
+      onChange(selected);
+    });
     host.selectControl = control;
     return control;
   }
@@ -128,9 +149,7 @@ export function searchableSelect(host, { name, label, options, value = '', input
   input.placeholder = `Cari ${label.toLowerCase()}...`;
   toggle.setAttribute('aria-label', `Pilihan ${label.toLowerCase()}`);
   list.setAttribute('aria-label', label);
-  let items = options;
   let filtered = items;
-  let selected = String(value);
   let activeIndex = -1;
   let opened = false;
   let listPointerActive = false;
@@ -188,7 +207,7 @@ export function searchableSelect(host, { name, label, options, value = '', input
       closeSelects();
       openedSelect = control;
       opened = true;
-      filtered = items;
+      filtered = items.filter((item) => !item.hidden);
       host.classList.add('open');
       input.setAttribute('aria-expanded', 'true');
       paint();
@@ -240,7 +259,7 @@ export function searchableSelect(host, { name, label, options, value = '', input
   input.addEventListener('input', () => {
     control.open();
     const query = input.value.normalize('NFKD').toLocaleLowerCase('id-ID').trim();
-    filtered = items.filter((item) => item.label.normalize('NFKD').toLocaleLowerCase('id-ID').includes(query));
+    filtered = items.filter((item) => !item.hidden && item.label.normalize('NFKD').toLocaleLowerCase('id-ID').includes(query));
     paint();
     control.position();
   });
