@@ -21,7 +21,7 @@ Dashboard keuangan keluarga yang compact, mobile-friendly, dengan format Rupiah,
 
 - Production: Cloudflare Worker (`api/index.js`) + D1 + Static Assets (`public/`).
 - Development Worker: Wrangler dengan D1 lokal yang terpisah dari database pribadi.
-- Runtime lokal mandiri: `server.js` + SQLite di `data/budgetku.sqlite`, tetap tersedia untuk data yang sudah ada.
+- Runtime lokal mandiri: `server.js` + SQLite di `data/budgetku.sqlite`, termasuk simulasi penyimpanan bukti R2 di `data/evidence/`.
 - Worker menyinkronkan household dengan polling setiap 8 detik saat tab aktif. Runtime Node lokal juga mendukung SSE.
 
 ## Development Worker
@@ -121,6 +121,6 @@ Tambahkan redirect URI `https://<domain-aplikasi>/auth/google/callback` ke Googl
 - Hanya template konfigurasi kosong yang masuk repository. Jangan menaruh secret pada `wrangler.jsonc`.
 - Password memakai PBKDF2-SHA256 dengan salt dan 100.000 iterasi sesuai batas runtime Cloudflare Workers. Hash baru menyimpan algoritma dan jumlah iterasi; hash lokal lama di-upgrade saat login berhasil. Sesi disimpan di database, dengan cookie HttpOnly, SameSite=Lax, dan Secure di HTTPS.
 - API memeriksa membership household untuk pembacaan, setoran goal, dan nota. Pengaturan household dan pembuatan invite hanya untuk owner.
-- Ini aplikasi MVP. Evaluasi rate limiting, retensi data, enkripsi token Gmail, monitoring, dan backup sebelum penggunaan finansial skala besar.
+- Login dibatasi 10 percobaan per alamat IP/email dalam 15 menit. Tetap aktifkan Cloudflare WAF/rate limiting untuk perlindungan edge tambahan sebelum penggunaan finansial skala besar; lakukan juga evaluasi retensi data, enkripsi token Gmail, monitoring, dan backup.
 - Backup SQLite secara konsisten menggunakan SQLite backup API atau ketika server berhenti; sertakan folder nota. Jangan commit backup.
 - D1 production mulai kosong dan terpisah dari data lokal. Gunakan fasilitas backup/export D1 secara privat sesuai kebutuhan akun Cloudflare.

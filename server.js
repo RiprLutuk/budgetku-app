@@ -12,8 +12,8 @@ import { sqliteBinding } from './lib/sqlite-binding.js';
 const __filename=fileURLToPath(import.meta.url), __dirname=path.dirname(__filename);
 function loadEnv(file=path.join(__dirname,'.env')){try{for(const line of fs.readFileSync(file,'utf8').split(/\r?\n/)){const s=line.trim();if(!s||s.startsWith('#'))continue;const i=s.indexOf('=');if(i>0&&!process.env[s.slice(0,i)])process.env[s.slice(0,i)]=s.slice(i+1)}}catch{}}
 loadEnv();
-const PORT=Number(process.env.PORT||3000), DATA_DIR=path.resolve(__dirname,process.env.DATA_DIR||'data'), UPLOAD_DIR=path.join(DATA_DIR,'receipts'), PUBLIC_DIR=path.join(__dirname,'public');
-fs.mkdirSync(UPLOAD_DIR,{recursive:true});
+const PORT=Number(process.env.PORT||3000), DATA_DIR=path.resolve(__dirname,process.env.DATA_DIR||'data'), UPLOAD_DIR=path.join(DATA_DIR,'receipts'), EVIDENCE_DIR=path.join(DATA_DIR,'evidence'), PUBLIC_DIR=path.join(__dirname,'public');
+fs.mkdirSync(UPLOAD_DIR,{recursive:true});fs.mkdirSync(EVIDENCE_DIR,{recursive:true});
 const db=new DatabaseSync(path.join(DATA_DIR,'budgetku.sqlite'));
 db.exec(`PRAGMA journal_mode=WAL;PRAGMA foreign_keys=ON;
 CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,email TEXT UNIQUE NOT NULL,name TEXT NOT NULL,password_hash TEXT NOT NULL,created_at TEXT NOT NULL,is_superadmin INTEGER NOT NULL DEFAULT 0,status TEXT NOT NULL DEFAULT 'active',deleted_at TEXT);
@@ -28,6 +28,8 @@ CREATE TABLE IF NOT EXISTS invites(token TEXT PRIMARY KEY,household_id TEXT NOT 
 CREATE TABLE IF NOT EXISTS oauth_states(state TEXT PRIMARY KEY,user_id TEXT NOT NULL,expires_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS gmail_tokens(user_id TEXT PRIMARY KEY,token_json TEXT NOT NULL,updated_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS receipts(id TEXT PRIMARY KEY,household_id TEXT NOT NULL,data_url TEXT NOT NULL,created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS debts(id TEXT PRIMARY KEY,household_id TEXT NOT NULL,created_by TEXT NOT NULL,direction TEXT NOT NULL CHECK(direction IN ('payable','receivable')),person_name TEXT NOT NULL,principal INTEGER NOT NULL CHECK(principal>0),issued_date TEXT NOT NULL,due_date TEXT,note TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS debt_payments(id TEXT PRIMARY KEY,debt_id TEXT NOT NULL,household_id TEXT NOT NULL,created_by TEXT NOT NULL,amount INTEGER NOT NULL CHECK(amount>0),paid_date TEXT NOT NULL,note TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS household_defaults(household_id TEXT PRIMARY KEY,initialized_at TEXT NOT NULL);`);
 
 db.exec('BEGIN IMMEDIATE');
@@ -50,6 +52,8 @@ try {
     ['households', 'cash_opening_date', 'TEXT'],
     ['transactions', 'version', 'INTEGER NOT NULL DEFAULT 0'],
     ['transactions', 'asset_id', 'TEXT'],
+    ['debts', 'repayment_mode', "TEXT NOT NULL DEFAULT 'installment' CHECK(repayment_mode IN ('installment','lump_sum'))"],
+    ['debts', 'evidence_key', 'TEXT'],
   ]) {
     if (!db.prepare(`PRAGMA table_info(${table})`).all().some((item) => item.name === column)) {
       db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
@@ -57,6 +61,8 @@ try {
   }
   db.exec(fs.readFileSync(path.join(__dirname, 'migrations/0003_financial_integrity.sql'), 'utf8').replace(/^ALTER TABLE[^\n]+/gm, ''));
   db.exec('CREATE INDEX IF NOT EXISTS idx_assets_household_active ON assets(household_id,disposed_at,acquired_at); CREATE INDEX IF NOT EXISTS idx_transactions_asset ON transactions(household_id,asset_id,tx_date);');
+  db.exec(fs.readFileSync(path.join(__dirname, 'migrations/0010_debt_integrity.sql'), 'utf8'));
+  db.exec("UPDATE debts SET repayment_mode='lump_sum' WHERE direction='receivable' AND repayment_mode='installment'");
   if (!db.prepare("SELECT value FROM app_settings WHERE key='auto_budget_revision_0004'").get()) {
     db.exec(fs.readFileSync(path.join(__dirname, 'migrations/0004_realistic_auto_budget.sql'), 'utf8'));
     db.prepare("INSERT INTO app_settings(key,value) VALUES('auto_budget_revision_0004',?)").run(new Date().toISOString());
@@ -94,12 +100,14 @@ function mime(p){return p.endsWith('.html')?'text/html; charset=utf-8':p.endsWit
 function staticFile(res,file){if(!fs.existsSync(file)||!fs.statSync(file).isFile())return false;const b=fs.readFileSync(file);res.writeHead(200,{'Content-Type':mime(file),'Content-Length':b.length});res.end(b);return true}
 function requireAuth(req,res){const u=sessionUser(req);if(!u){json(res,401,{error:'Silakan login dulu'});return null}return u}
 function requireHouse(req,res,u,url){const h=householdFor(u.id,req.headers['x-household-id']||url.searchParams.get('householdId'));if(!h){json(res,403,{error:'Tidak punya akses household'});return null}return h}
+function evidenceFile(key){const safe=String(key||'').split('/').every((part)=>part&&part!=='.'&&part!=='..');if(!safe)throw new Error('Key bukti tidak valid');return path.join(EVIDENCE_DIR,...String(key).split('/'))}
+const localEvidence={async put(key,value,options={}){const file=evidenceFile(key);fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,Buffer.from(value));fs.writeFileSync(`${file}.meta`,JSON.stringify(options.httpMetadata||{}));},async head(key){try{fs.accessSync(evidenceFile(key));return {}}catch{return null}},async get(key){try{const file=evidenceFile(key),meta=JSON.parse(fs.readFileSync(`${file}.meta`,'utf8'));return {body:fs.readFileSync(file),httpMetadata:meta}}catch{return null}},async delete(key){const file=evidenceFile(key);fs.rmSync(file,{force:true});fs.rmSync(`${file}.meta`,{force:true})}};
 
 
 const server=http.createServer(async(req,res)=>{try{
   const url=new URL(req.url,`http://${req.headers.host||'localhost'}`), p=url.pathname;
   if(req.method==='GET'&&p==='/health')return json(res,200,{ok:true,db:'sqlite',realtimeClients:clients.size});
-  if(p.startsWith('/api/auth/')||p.startsWith('/api/admin/')||p.startsWith('/api/account/')||p.startsWith('/api/gmail/')||p.startsWith('/auth/google')||p==='/api/me'||p==='/api/snapshot'||p==='/api/goals'||p.startsWith('/api/goals/')||p==='/api/transactions'||p.startsWith('/api/transactions/')||p==='/api/categories'||p==='/api/household') {
+  if(p.startsWith('/api/auth/')||p.startsWith('/api/admin/')||p.startsWith('/api/account/')||p.startsWith('/api/gmail/')||p.startsWith('/auth/google')||p==='/api/me'||p==='/api/snapshot'||p==='/api/goals'||p.startsWith('/api/goals/')||p==='/api/transactions'||p.startsWith('/api/transactions/')||p.startsWith('/api/debts')||p.startsWith('/api/debt-evidence')||p==='/api/categories'||p==='/api/household') {
     const chunks = [];
     let size = 0;
     for await (const chunk of req) {
@@ -109,7 +117,7 @@ const server=http.createServer(async(req,res)=>{try{
     }
     const method = req.method || 'GET';
     const request = new Request(url, {method,headers:req.headers,...(!['GET','HEAD'].includes(method)?{body:Buffer.concat(chunks)}:{})});
-    const response = await apiApp.fetch(request, {...process.env,DB:sqliteBinding(db),REALTIME:'events'});
+    const response = await apiApp.fetch(request, {...process.env,DB:sqliteBinding(db),EVIDENCE:localEvidence,REALTIME:'events'});
     if (response.ok && !['GET','HEAD'].includes(method)) {
       const user = sessionUser(req);
       const household = user && householdFor(user.id, req.headers['x-household-id'] || url.searchParams.get('householdId'));

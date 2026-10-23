@@ -88,6 +88,15 @@ async function requireHousehold(c, user) {
 function validMoney(value, minimum = 0) {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= minimum;
 }
+async function recordLoginAttempt(db, c, email) {
+  const key = crypto.createHash('sha256').update(`${c.req.header('cf-connecting-ip') || 'local'}:${email}`).digest('hex');
+  const nowMs = Date.now(), expiry = nowMs - 15 * 60 * 1000;
+  await db.execute({ sql: `INSERT INTO login_rate_limits(key,window_started,attempts) VALUES(?,?,1)
+    ON CONFLICT(key) DO UPDATE SET window_started=CASE WHEN window_started<? THEN excluded.window_started ELSE window_started END,
+    attempts=CASE WHEN window_started<? THEN 1 ELSE attempts+1 END`, args: [key, nowMs, expiry, expiry] });
+  if (Number((await queryOne(db, 'SELECT attempts FROM login_rate_limits WHERE key=?', [key]))?.attempts) > 10) throw new HTTPException(429, { message: 'Terlalu banyak percobaan login. Coba lagi 15 menit lagi.' });
+  return key;
+}
 function goalFields(body, existing = {}) {
   const name = body.name === undefined ? existing.name : body.name;
   const target = body.target === undefined ? existing.target : body.target;
@@ -208,7 +217,9 @@ async function initialize(c, next) {
 app.use("/api/*", initialize);
 app.use("/auth/*", initialize);
 app.use("/health", initialize);
-app.use("*", bodyLimit({ maxSize: 1500000, onError: (c) => json(c, { error: "Payload terlalu besar. Maksimum nota 1 MB." }, 413) }));
+// Binary uploads are capped at 1 MB by their own endpoints. The transport cap
+// leaves room for multipart and base64 overhead without allowing large payloads.
+app.use("*", bodyLimit({ maxSize: 1500000, onError: (c) => json(c, { error: "Payload terlalu besar. Maksimum unggahan 1 MB." }, 413) }));
 app.use("*", async (c, next) => {
   if (!["GET", "HEAD", "OPTIONS"].includes(c.req.method)) {
     const origin = c.req.header("origin");
@@ -222,6 +233,9 @@ app.onError((error, c) => {
   if (message.includes("GOAL_BALANCE_NEGATIVE")) return json(c, { error: "Saldo goal tidak cukup pada tanggal transaksi. Koreksi ini juga tidak boleh membuat pencairan berikutnya minus." }, 409);
   if (message.includes("GOAL_INITIAL_LOCKED")) return json(c, { error: "Saldo awal terkunci setelah ada riwayat. Gunakan setoran, pencairan, atau koreksi transaksi terkait." }, 409);
   if (message.includes("INVALID_GOAL")) return json(c, { error: "Goal tidak valid atau bukan milik keluarga ini" }, 400);
+  if (message.includes("DEBT_PAYMENT_EXCEEDS_REMAINING")) return json(c, { error: "Pembayaran melebihi sisa hutang/piutang. Muat ulang data lalu coba lagi." }, 409);
+  if (message.includes("DEBT_PAYMENT_MUST_SETTLE")) return json(c, { error: "Catatan ini wajib dilunasi sekali bayar." }, 409);
+  if (message.includes("DEBT_PAYMENT_INVALID")) return json(c, { error: "Catatan hutang/piutang tidak valid." }, 409);
   console.error("BudgetKu API gagal:", error.code || error.name, error.message);
   return json(c, { error: "Permintaan gagal. Silakan coba lagi." }, 500);
 });
@@ -234,8 +248,11 @@ app.post("/api/auth/login", async (c) => {
   const body = await readJson(c);
   const password = String(body.password || "");
   if (!password || password.length > 1024) return json(c, { error: "Email atau password salah" }, 401);
-  const user = await queryOne(db, "SELECT * FROM users WHERE email=?", [normEmail(body.email)]);
+  const email = normEmail(body.email);
+  const rateKey = await recordLoginAttempt(db, c, email);
+  const user = await queryOne(db, "SELECT * FROM users WHERE email=?", [email]);
   if (!user || user.status !== "active" || !verifyPassword(password, user.password_hash)) return json(c, { error: "Email atau password salah" }, 401);
+  await db.execute({ sql: 'DELETE FROM login_rate_limits WHERE key=?', args: [rateKey] });
   if (needsPasswordRehash(user.password_hash)) {
     await db.execute({ sql: "UPDATE users SET password_hash=? WHERE id=?", args: [hashPassword(body.password), user.id] });
   }
@@ -342,7 +359,10 @@ function debtFields(body) {
 app.post('/api/debts', async (c) => {
   const user = await requireUser(c); const household = await requireHousehold(c, user); const db = getDb(c.env.DB); const debt = debtFields(await readJson(c)); const debtId = id();
   if (debt.evidenceKey && (!debt.evidenceKey.startsWith(`debt-evidence/${household.id}/`) || !(await c.env.EVIDENCE.head(debt.evidenceKey)))) throw new HTTPException(400, { message: 'Bukti dokumen tidak ditemukan.' });
-  await db.execute({ sql: 'INSERT INTO debts(id,household_id,created_by,direction,person_name,principal,issued_date,due_date,note,repayment_mode,evidence_key,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)', args: [debtId, household.id, user.id, debt.direction, debt.personName, debt.principal, debt.issuedDate, debt.dueDate, debt.note, debt.repaymentMode, debt.evidenceKey, now()] });
+  await db.batch([
+    { sql: 'INSERT INTO debts(id,household_id,created_by,direction,person_name,principal,issued_date,due_date,note,repayment_mode,evidence_key,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)', args: [debtId, household.id, user.id, debt.direction, debt.personName, debt.principal, debt.issuedDate, debt.dueDate, debt.note, debt.repaymentMode, debt.evidenceKey, now()] },
+    { sql: 'INSERT INTO debt_audit(id,household_id,debt_id,actor_id,action,amount,created_at) VALUES(?,?,?,?,?,?,?)', args: [id(), household.id, debtId, user.id, 'create', debt.principal, now()] },
+  ]);
   return json(c, { id: debtId }, 201);
 });
 
@@ -351,7 +371,7 @@ app.post('/api/debt-evidence', async (c) => {
   const form = await c.req.formData(); const file = form.get('file');
   if (!(file instanceof File)) throw new HTTPException(400, { message: 'Pilih foto atau dokumen bukti.' });
   const types = new Set(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']);
-  if (!types.has(file.type) || file.size < 16 || file.size > 5 * 1024 * 1024) throw new HTTPException(400, { message: 'Bukti harus JPG, PNG, WebP, atau PDF dengan ukuran maksimal 5 MB.' });
+  if (!types.has(file.type) || file.size < 16 || file.size > 1024 * 1024) throw new HTTPException(400, { message: 'Bukti harus JPG, PNG, WebP, atau PDF dengan ukuran maksimal 1 MB.' });
   const bytes = new Uint8Array(await file.arrayBuffer());
   const signatures = {
     'image/jpeg': bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff,
@@ -380,18 +400,24 @@ app.post('/api/debts/:id/payments', async (c) => {
   const debt = await queryOne(db, `SELECT d.*,COALESCE(SUM(p.amount),0) AS paid_amount FROM debts d LEFT JOIN debt_payments p ON p.debt_id=d.id WHERE d.id=? AND d.household_id=? GROUP BY d.id`, [c.req.param('id'), household.id]);
   const amount = body.amount; const paidDate = body.paidDate; const note = String(body.note || '').trim();
   if (!debt) throw new HTTPException(404, { message: 'Catatan hutang/piutang tidak ditemukan.' });
+  if (household.role !== 'owner' && debt.created_by !== user.id) throw new HTTPException(403, { message: 'Hanya pencatat atau owner yang dapat mencatat pembayaran.' });
   const remaining = Number(debt.principal) - Number(debt.paid_amount);
   if (!validMoney(amount, 1) || amount > remaining || !validDate(paidDate) || note.length > 255) throw new HTTPException(400, { message: 'Pembayaran melebihi sisa atau data tidak valid.' });
   if (debt.repayment_mode === 'lump_sum' && amount !== remaining) throw new HTTPException(400, { message: 'Piutang ini disetel wajib lunas sekali bayar.' });
-  await db.execute({ sql: 'INSERT INTO debt_payments(id,debt_id,household_id,created_by,amount,paid_date,note,created_at) VALUES(?,?,?,?,?,?,?,?)', args: [id(), debt.id, household.id, user.id, amount, paidDate, note, now()] });
+  await db.batch([
+    { sql: 'INSERT INTO debt_payments(id,debt_id,household_id,created_by,amount,paid_date,note,created_at) VALUES(?,?,?,?,?,?,?,?)', args: [id(), debt.id, household.id, user.id, amount, paidDate, note, now()] },
+    { sql: 'INSERT INTO debt_audit(id,household_id,debt_id,actor_id,action,amount,created_at) VALUES(?,?,?,?,?,?,?)', args: [id(), household.id, debt.id, user.id, 'payment', amount, now()] },
+  ]);
   return json(c, { ok: true });
 });
 
 app.delete('/api/debts/:id', async (c) => {
   const user = await requireUser(c); const household = await requireHousehold(c, user); const db = getDb(c.env.DB);
-  const debt = await queryOne(db, 'SELECT id,evidence_key FROM debts WHERE id=? AND household_id=?', [c.req.param('id'), household.id]);
+  const debt = await queryOne(db, 'SELECT id,evidence_key,created_by FROM debts WHERE id=? AND household_id=?', [c.req.param('id'), household.id]);
   if (!debt) throw new HTTPException(404, { message: 'Catatan hutang/piutang tidak ditemukan.' });
+  if (household.role !== 'owner' && debt.created_by !== user.id) throw new HTTPException(403, { message: 'Hanya pencatat atau owner yang dapat menghapus catatan.' });
   await db.batch([
+    { sql: 'INSERT INTO debt_audit(id,household_id,debt_id,actor_id,action,amount,created_at) VALUES(?,?,?,?,?,?,?)', args: [id(), household.id, debt.id, user.id, 'delete', null, now()] },
     { sql: 'DELETE FROM debt_payments WHERE debt_id=? AND household_id=?', args: [debt.id, household.id] },
     { sql: 'DELETE FROM debts WHERE id=? AND household_id=?', args: [debt.id, household.id] },
   ]);

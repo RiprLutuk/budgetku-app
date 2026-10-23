@@ -1,4 +1,4 @@
-const CACHE = 'budgetku-family-v41-unified-page-grammar-assets';
+const CACHE = 'budgetku-family-v42-debt-integrity-assets';
 const ASSETS = [
   '/',
   '/index.html',
@@ -14,6 +14,7 @@ const ASSETS = [
   '/views/dashboard.js',
   '/views/goals.js',
   '/views/settings.js',
+  '/views/debts.js',
   '/ui.js',
   '/exports.js',
   '/money.js',
