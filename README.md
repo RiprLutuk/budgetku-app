@@ -111,6 +111,8 @@ Nota Worker disimpan privat di D1, maksimum **1 MB per gambar**, dan hanya dapat
 
 Gmail tidak aktif sampai Google OAuth dikonfigurasi. Login sebagai superadmin lalu buka **Settings -> Integrasi Google** untuk mengisi Client ID, Client Secret, dan redirect URI. Konfigurasi bisa dibaca (tanpa mengembalikan secret), diperbarui, dan dihapus dari dashboard kapan pun; tidak perlu mengedit `.env` atau deploy ulang.
 
+Set secret Worker `GMAIL_TOKEN_ENCRYPTION_KEY` ke nilai base64 32-byte sebelum menghubungkan Gmail. Token OAuth baru dienkripsi AES-256-GCM sebelum disimpan di D1.
+
 Nilai disimpan di `app_settings` pada database server, bukan di aset publik atau repository. Saat konfigurasi berubah, koneksi Gmail lama direset agar setiap member menghubungkan ulang dengan kredensial yang baru. Konfigurasi environment lama tetap dibaca jika belum pernah ada konfigurasi dashboard; menghapus konfigurasi melalui dashboard juga menonaktifkan fallback tersebut.
 
 Tambahkan redirect URI `https://<domain-aplikasi>/auth/google/callback` ke Google Cloud OAuth client bertipe **Web application**. Redirect URI harus memakai origin aplikasi yang sama; HTTP hanya diizinkan pada localhost untuk development. Akses Gmail read-only dan terpisah per user; impor hanya mencatat transaksi setelah review. Kandidat Worker dibatasi 20 pesan per permintaan. Mengimpor referensi email yang sama tidak menggandakan transaksi.

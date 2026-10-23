@@ -119,15 +119,31 @@ async function validateOwnedRows(db, table, rows, householdId) {
   });
   if (result.rows.length !== ids.length) throw new HTTPException(400, { message: "Data bukan milik household aktif" });
 }
-async function gmailToken(db, userId) {
-  const row = await queryOne(db, "SELECT token_json FROM gmail_tokens WHERE user_id=?", [userId]);
-  return row ? JSON.parse(row.token_json) : null;
+function gmailTokenKey(env) {
+  const key = Buffer.from(String(env.GMAIL_TOKEN_ENCRYPTION_KEY || ''), 'base64');
+  if (key.length !== 32) throw new Error('GMAIL_TOKEN_ENCRYPTION_KEY harus berupa key base64 32-byte.');
+  return key;
 }
-async function saveGmailToken(db, userId, value) {
+function encryptGmailToken(value, env) {
+  const nonce = crypto.randomBytes(12); const cipher = crypto.createCipheriv('aes-256-gcm', gmailTokenKey(env), nonce);
+  const ciphertext = Buffer.concat([cipher.update(JSON.stringify(value), 'utf8'), cipher.final()]);
+  return `enc:v1:${nonce.toString('base64url')}:${cipher.getAuthTag().toString('base64url')}:${ciphertext.toString('base64url')}`;
+}
+function decryptGmailToken(value, env) {
+  if (!String(value).startsWith('enc:v1:')) return JSON.parse(value);
+  const [, , nonce, tag, ciphertext] = String(value).split(':'); const decipher = crypto.createDecipheriv('aes-256-gcm', gmailTokenKey(env), Buffer.from(nonce, 'base64url'));
+  decipher.setAuthTag(Buffer.from(tag, 'base64url'));
+  return JSON.parse(Buffer.concat([decipher.update(Buffer.from(ciphertext, 'base64url')), decipher.final()]).toString('utf8'));
+}
+async function gmailToken(db, userId, env) {
+  const row = await queryOne(db, "SELECT token_json FROM gmail_tokens WHERE user_id=?", [userId]);
+  return row ? decryptGmailToken(row.token_json, env) : null;
+}
+async function saveGmailToken(db, userId, value, env) {
   await db.execute({
     sql: `INSERT INTO gmail_tokens(user_id,token_json,updated_at) VALUES(?,?,?)
           ON CONFLICT(user_id) DO UPDATE SET token_json=excluded.token_json,updated_at=excluded.updated_at`,
-    args: [userId, JSON.stringify(value), now()],
+    args: [userId, encryptGmailToken(value, env), now()],
   });
 }
 async function exchangeCode(c, code) {
@@ -153,7 +169,7 @@ async function gmailAccess(c, userId) {
   const db = getDb(c.env.DB);
   const config = await googleOAuthConfig(db, c.env, c.req.url);
   if (!isGoogleOAuthConfigured(config)) throw new HTTPException(400, { message: 'Integrasi Gmail belum diatur di Settings' });
-  let saved = await gmailToken(db, userId);
+  let saved = await gmailToken(db, userId, c.env);
   if (!saved) throw new Error("Gmail belum terkoneksi");
   if (saved.expires_at && saved.expires_at > Date.now() + 60000) return saved.access_token;
   if (!saved.refresh_token) return saved.access_token;
@@ -171,7 +187,7 @@ async function gmailAccess(c, userId) {
   const data = await response.json();
   if (!response.ok) throw new Error(data.error_description || "Refresh token gagal");
   saved = { ...saved, ...data, expires_at: Date.now() + (data.expires_in || 3600) * 1000 };
-  await saveGmailToken(db, userId, saved);
+  await saveGmailToken(db, userId, saved, c.env);
   return saved.access_token;
 }
 const decodeBase64Url = (value) => Buffer.from(String(value || "").replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
@@ -750,7 +766,7 @@ app.get("/api/gmail/status", async (c) => {
   if (!user) return;
   const config = await googleOAuthConfig(db, c.env, c.req.url);
   const configured = isGoogleOAuthConfigured(config);
-  return json(c, { configured, connected: configured && Boolean(await gmailToken(db, user.id)) });
+  return json(c, { configured, connected: configured && Boolean(await gmailToken(db, user.id, c.env)) });
 });
 
 app.get("/auth/google", async (c) => {
@@ -776,8 +792,8 @@ app.get("/auth/google/callback", async (c) => {
   if (!consumed.rowsAffected) return c.text("OAuth state sudah dipakai", 400);
   try {
     const exchanged = await exchangeCode(c, c.req.query("code") || "");
-    const previous = (await gmailToken(db, savedState.user_id)) || {};
-    await saveGmailToken(db, savedState.user_id, { ...previous, ...exchanged });
+    const previous = (await gmailToken(db, savedState.user_id, c.env)) || {};
+    await saveGmailToken(db, savedState.user_id, { ...previous, ...exchanged }, c.env);
     c.header("Location", "/?gmail=connected");
     return c.body(null, 302);
   } catch (error) {
