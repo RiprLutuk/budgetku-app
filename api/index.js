@@ -352,6 +352,17 @@ app.post('/api/debts/:id/payments', async (c) => {
   return json(c, { ok: true });
 });
 
+app.delete('/api/debts/:id', async (c) => {
+  const user = await requireUser(c); const household = await requireHousehold(c, user); const db = getDb(c.env.DB);
+  const debt = await queryOne(db, 'SELECT id FROM debts WHERE id=? AND household_id=?', [c.req.param('id'), household.id]);
+  if (!debt) throw new HTTPException(404, { message: 'Catatan hutang/piutang tidak ditemukan.' });
+  await db.batch([
+    { sql: 'DELETE FROM debt_payments WHERE debt_id=? AND household_id=?', args: [debt.id, household.id] },
+    { sql: 'DELETE FROM debts WHERE id=? AND household_id=?', args: [debt.id, household.id] },
+  ]);
+  return json(c, { ok: true });
+});
+
 async function saveTransaction(c) {
   const db = getDb(c.env.DB);
   const user = await requireUser(c);
