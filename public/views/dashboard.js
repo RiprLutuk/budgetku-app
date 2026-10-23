@@ -127,6 +127,58 @@ export function renderDashboard(container, { snapshot, currentMonth, summary, he
   onBind();
 }
 
+function monitoringSpending(transaction) {
+  return transaction.type === 'expense' && !transaction.goal_id && !transaction.asset_id;
+}
+
+function monthlySpending(summary) {
+  return Math.max(0, Number(summary?.expense || 0) - Number(summary?.goal_savings || 0) - Number(summary?.asset_expense || 0));
+}
+
+function monitoringMonthLabel(month) {
+  return new Intl.DateTimeFormat('id-ID', { month: 'long', year: 'numeric' }).format(monthDate(month));
+}
+
+export function renderMonitoring(container, { snapshot, currentMonth, rupiah }) {
+  const transactions = snapshot.transactions.filter(monitoringSpending);
+  const total = transactions.reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
+  const previousMonth = shiftMonth(currentMonth, -1);
+  const previous = monthlySpending((snapshot.monthlySummary || []).find((item) => item.month === previousMonth));
+  const delta = total - previous;
+  const deltaText = previous ? `${delta > 0 ? '+' : ''}${Math.round(delta / previous * 100)}% vs ${monthLabel(previousMonth)}` : 'Belum ada pembanding bulan lalu';
+  const [year, month] = currentMonth.split('-').map(Number);
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const today = new Date();
+  const trackedDays = currentMonth === monthKey(today) ? Math.min(daysInMonth, today.getDate()) : daysInMonth;
+  const daily = Array.from({ length: daysInMonth }, (_, index) => ({ day: index + 1, total: 0 }));
+  for (const transaction of transactions) {
+    const day = Number(String(transaction.tx_date).slice(8, 10));
+    if (daily[day - 1]) daily[day - 1].total += Number(transaction.amount || 0);
+  }
+  const maxDaily = Math.max(1, ...daily.map((item) => item.total));
+  const categories = new Map();
+  for (const transaction of transactions) {
+    const label = transaction.category_name || 'Tanpa kategori';
+    categories.set(label, (categories.get(label) || 0) + Number(transaction.amount || 0));
+  }
+  const ranking = [...categories.entries()].map(([label, amount]) => ({ label, amount })).sort((left, right) => right.amount - left.amount);
+  const top = ranking[0];
+  const average = trackedDays ? total / trackedDays : 0;
+  const peak = daily.reduce((winner, item) => item.total > winner.total ? item : winner, daily[0]);
+
+  container.innerHTML = `<div class="content monitoring-content">
+    <section class="monitoring-intro"><div><span class="eyebrow">RINGKASAN HARIAN</span><h2>${escapeHtml(monitoringMonthLabel(currentMonth))}</h2><p>Fokus pada belanja konsumtif; setoran tabungan dan pembelian aset tidak dihitung di sini.</p></div></section>
+    <section class="monitoring-kpis" aria-label="Ringkasan pengeluaran">
+      <article><span>Belanja bulan ini</span><strong>${rupiah(total)}</strong><small class="${delta > 0 ? 'is-up' : delta < 0 ? 'is-down' : ''}">${escapeHtml(deltaText)}</small></article>
+      <article><span>Rata-rata per hari</span><strong>${rupiah(average)}</strong><small>${trackedDays} hari terpantau</small></article>
+      <article><span>Pengeluaran terbesar</span><strong>${top ? escapeHtml(top.label) : '—'}</strong><small>${top ? rupiah(top.amount) : 'Belum ada transaksi'}</small></article>
+      <article><span>Hari paling tinggi</span><strong>${peak?.total ? `${peak.day} ${monthLabel(currentMonth)}` : '—'}</strong><small>${peak?.total ? rupiah(peak.total) : 'Belum ada transaksi'}</small></article>
+    </section>
+    <section class="surface-panel monitoring-chart-panel"><div class="panel-heading"><div><h3>Belanja harian</h3><small>Bandingkan lonjakan antarhari untuk menemukan kebiasaan belanja.</small></div><strong>${rupiah(total)}</strong></div><div class="daily-chart" role="img" aria-label="Chart belanja harian ${escapeHtml(monitoringMonthLabel(currentMonth))}">${daily.map((item) => `<div class="daily-bar" title="Tanggal ${item.day}: ${rupiah(item.total)}"><span style="height:${item.total ? Math.max(4, item.total / maxDaily * 100) : 0}%"></span>${item.day === 1 || item.day === daysInMonth || item.day % 5 === 0 ? `<small>${item.day}</small>` : ''}</div>`).join('')}</div></section>
+    <section class="surface-panel monitoring-ranking"><div class="panel-heading"><div><h3>Habis untuk apa?</h3><small>Urutan kategori berdasarkan pengeluaran bulan ini.</small></div><span class="panel-count">${ranking.length}</span></div>${ranking.length ? `<ol>${ranking.map((item) => `<li><div><span>${escapeHtml(item.label)}</span><div class="monitoring-rank-track"><i style="width:${total ? item.amount / total * 100 : 0}%"></i></div></div><strong>${rupiah(item.amount)}</strong><small>${total ? Math.round(item.amount / total * 100) : 0}%</small></li>`).join('')}</ol>` : '<div class="empty">Belum ada pengeluaran konsumtif pada periode ini.</div>'}</section>
+  </div>`;
+}
+
 export function renderTransactions(container, { snapshot, currentMonth, onBind, onExportCsv }) {
   const rows = snapshot.transactions.filter((transaction) => transaction.tx_date.slice(0, 7) === currentMonth);
   container.innerHTML = `<div class="content"><section class="surface-panel ledger-panel full-ledger"><div class="ledger-toolbar"><div><span class="eyebrow">${new Intl.DateTimeFormat('id-ID', { month: 'long', year: 'numeric' }).format(monthDate(currentMonth))}</span><small>${rows.length} catatan · ketuk untuk detail atau koreksi</small></div><div class="panel-actions"><button id="exportCsv" class="icon-btn" type="button" aria-label="Ekspor CSV" title="Ekspor CSV">${icon('download')}</button><button id="addTx2" class="primary" aria-label="Catat transaksi" title="Catat transaksi">${icon('plus')}<span>Catat</span></button></div></div><label class="ledger-search" for="transactionSearch">${icon('search')}<input id="transactionSearch" type="search" placeholder="Cari catatan, kategori, atau anggota" autocomplete="off"><span class="sr-only">Cari transaksi bulan terpilih</span></label><div class="ledger-filters" role="group" aria-label="Jenis transaksi"><button type="button" data-filter="all" aria-pressed="true">Semua</button><button type="button" data-filter="income" aria-pressed="false">Masuk</button><button type="button" data-filter="expense" aria-pressed="false">Belanja</button><button type="button" data-filter="savings" aria-pressed="false">Tabungan</button></div><p id="transactionResultCount" class="small muted" role="status" aria-live="polite"></p><div class="ledger-list"></div></section></div>`;

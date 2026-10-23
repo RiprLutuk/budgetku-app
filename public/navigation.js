@@ -1,4 +1,4 @@
-const views = new Set(["dashboard", "transactions", "budget", "goals", "receipts", "family", "users", "settings"]);
+const views = new Set(["dashboard", "transactions", "budget", "goals", "monitoring", "receipts", "family", "users", "settings"]);
 const validMonth = (value) => typeof value === "string" && /^(?!0000)\d{4}-(0[1-9]|1[0-2])$/.test(value);
 
 export function createNavigation({ getUser, getCurrentMonth }) {

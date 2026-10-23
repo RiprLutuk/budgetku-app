@@ -3181,7 +3181,7 @@ body.menu-open {
   }
   .sidebar nav {
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: 2px;
     width: 100%;
   }
@@ -6072,6 +6072,27 @@ main {
 body.menu-open main {
   overflow: hidden;
 }
+
+/* Monitoring: daily spending should be comparable at a glance, not a dense report. */
+.monitoring-content { display: grid; gap: 14px; }
+.monitoring-intro h2 { margin: 3px 0 0; color: var(--dark); font-size: 22px; letter-spacing: -0.045em; }
+.monitoring-intro p { max-width: 58ch; margin: 5px 0 0; color: var(--muted); font-size: 12px; }
+.monitoring-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.monitoring-kpis article { display: grid; min-width: 0; gap: 5px; padding: 15px; border: 1px solid var(--border); border-radius: var(--surface-radius); background: var(--card); }
+.monitoring-kpis span, .monitoring-kpis small { color: var(--muted); font-size: 11px; }
+.monitoring-kpis strong { overflow: hidden; color: var(--dark); font-size: clamp(16px, 1.6vw, 22px); letter-spacing: -0.045em; text-overflow: ellipsis; white-space: nowrap; }
+.monitoring-kpis small.is-up { color: var(--bad); }.monitoring-kpis small.is-down { color: var(--good); }
+.monitoring-chart-panel .panel-heading > strong { flex: 0 0 auto; color: var(--primary); font-family: var(--font-data); font-size: 12px; }
+.daily-chart { display: grid; grid-template-columns: repeat(31, minmax(0, 1fr)); align-items: end; gap: 3px; height: 190px; margin-top: 20px; padding-bottom: 18px; border-bottom: 1px solid var(--border); }
+.daily-bar { position: relative; display: flex; align-items: end; height: 100%; min-width: 0; }
+.daily-bar span { display: block; width: 100%; border-radius: 4px 4px 1px 1px; background: linear-gradient(180deg, #4c8b99, var(--primary)); }
+.daily-bar small { position: absolute; bottom: -17px; left: 50%; color: var(--muted); font-size: 9px; transform: translateX(-50%); }
+.monitoring-ranking ol { display: grid; gap: 10px; margin: 16px 0 0; padding: 0; list-style: none; }
+.monitoring-ranking li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 12px; }
+.monitoring-ranking li > div { min-width: 0; }.monitoring-ranking li span { display: block; overflow: hidden; color: var(--dark); font-size: 12px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.monitoring-ranking li strong { color: var(--primary); font-family: var(--font-data); font-size: 11px; font-weight: 500; }.monitoring-ranking li > small { width: 30px; color: var(--muted); font-size: 10px; text-align: right; }
+.monitoring-rank-track { height: 5px; margin-top: 5px; overflow: hidden; border-radius: 99px; background: var(--card-hover); }.monitoring-rank-track i { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
+@media (max-width: 760px) { .monitoring-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }.monitoring-kpis article { padding: 12px; }.monitoring-kpis strong { font-size: 16px; }.daily-chart { height: 150px; gap: 2px; }.monitoring-chart-panel, .monitoring-ranking { padding: 14px; } }
 
 dialog.month-dialog,
 .confirm-dialog {

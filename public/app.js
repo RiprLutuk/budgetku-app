@@ -6,7 +6,7 @@ import { renderSettings as renderSettingsView } from "./views/settings.js";
 import { createTransactionDialog } from "./components/transaction-dialog.js";
 import { financialHealth, summarizeCashflow } from "./cashflow.js";
 import { goalPlan } from "./goal-math.js";
-import { renderDashboard as renderDashboardView, renderTransactions as renderTransactionsView } from "./views/dashboard.js";
+import { renderDashboard as renderDashboardView, renderMonitoring as renderMonitoringView, renderTransactions as renderTransactionsView } from "./views/dashboard.js";
 import { createNavigation } from "./navigation.js";
 import { createPullRefresh } from "./pull-refresh.js";
 import { downloadTransactions } from "./exports.js";
@@ -265,7 +265,7 @@ function render() {
       else button.removeAttribute("aria-current");
     });
   moreButton.classList.toggle("active", ["receipts", "family", "users", "settings"].includes(currentView));
-  monthControl.hidden = !["dashboard", "transactions", "budget"].includes(currentView);
+  monthControl.hidden = !["dashboard", "transactions", "budget", "monitoring"].includes(currentView);
   privacyButton.hidden = currentView !== "dashboard";
   document.querySelector("#quickAdd").hidden = currentView !== "dashboard";
   pageTitle.textContent = {
@@ -273,6 +273,7 @@ function render() {
     transactions: "Transaksi",
     budget: "Auto Budget",
     goals: "Tabungan",
+    monitoring: "Monitoring",
     receipts: "Nota & Gmail",
     family: "Keluarga",
     users: "Kelola User",
@@ -283,6 +284,7 @@ function render() {
   if (currentView === "transactions") return renderTransactions();
   if (currentView === "budget") return renderBudget();
   if (currentView === "goals") return renderGoals();
+  if (currentView === "monitoring") return renderMonitoring();
   if (currentView === "receipts") return renderReceipts();
   if (currentView === "family") return renderFamily();
   if (currentView === "users") return renderUsers();
@@ -357,6 +359,10 @@ function renderDashboard() {
   const monthName = new Intl.DateTimeFormat("id-ID", { month: "long", year: "numeric" }).format(new Date(`${currentMonth}-01T00:00:00`));
   const summary = monthCashflow();
   renderDashboardView(app, { snapshot, currentMonth, summary, health: monthHealth(summary), monthName, rupiah, insightItems: insightItems(summary), privacyButton, onBind: bindCommon });
+}
+
+function renderMonitoring() {
+  renderMonitoringView(app, { snapshot, currentMonth, rupiah });
 }
 function renderTransactions() {
   renderTransactionsView(app, { snapshot, currentMonth, rupiah, onBind: bindCommon, onExportCsv: downloadTransactions });
@@ -999,7 +1005,7 @@ document.querySelector("#quickAdd").onclick = () => {
 document.querySelectorAll("dialog").forEach((dialog) => {
   dialog.addEventListener("close", closeSelects);
 });
-const navigationIcons = { dashboard: "overview", transactions: "ledger", budget: "allocation", goals: "target", receipts: "receipt", family: "family", users: "admin", settings: "sliders" };
+const navigationIcons = { dashboard: "overview", transactions: "ledger", budget: "allocation", goals: "target", monitoring: "health", receipts: "receipt", family: "family", users: "admin", settings: "sliders" };
 document.querySelectorAll(".nav").forEach((button) => {
   button.querySelector(".nav-icon").innerHTML = icon(navigationIcons[button.dataset.view]);
 });
