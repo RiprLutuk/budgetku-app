@@ -167,7 +167,7 @@ export function renderMonitoring(container, { snapshot, currentMonth, rupiah }) 
   const peak = daily.reduce((winner, item) => item.total > winner.total ? item : winner, daily[0]);
 
   container.innerHTML = `<div class="content monitoring-content">
-    <section class="monitoring-intro"><div><span class="eyebrow">RINGKASAN HARIAN</span><h2>${escapeHtml(monitoringMonthLabel(currentMonth))}</h2><p>Fokus pada belanja konsumtif; setoran tabungan dan pembelian aset tidak dihitung di sini.</p></div></section>
+    <section class="monitoring-intro"><p>Belanja konsumtif ${escapeHtml(monitoringMonthLabel(currentMonth))}. Tabungan dan pembelian aset tidak dihitung.</p></section>
     <section class="monitoring-kpis" aria-label="Ringkasan pengeluaran">
       <article><span>Belanja bulan ini</span><strong>${rupiah(total)}</strong><small class="${delta > 0 ? 'is-up' : delta < 0 ? 'is-down' : ''}">${escapeHtml(deltaText)}</small></article>
       <article><span>Rata-rata per hari</span><strong>${rupiah(average)}</strong><small>${trackedDays} hari terpantau</small></article>
@@ -175,7 +175,7 @@ export function renderMonitoring(container, { snapshot, currentMonth, rupiah }) 
       <article><span>Hari paling tinggi</span><strong>${peak?.total ? `${peak.day} ${monthLabel(currentMonth)}` : '—'}</strong><small>${peak?.total ? rupiah(peak.total) : 'Belum ada transaksi'}</small></article>
     </section>
     <section class="surface-panel monitoring-chart-panel"><div class="panel-heading"><div><h3>Belanja harian</h3><small>Bandingkan lonjakan antarhari untuk menemukan kebiasaan belanja.</small></div><strong>${rupiah(total)}</strong></div><div class="daily-chart" role="img" aria-label="Chart belanja harian ${escapeHtml(monitoringMonthLabel(currentMonth))}">${daily.map((item) => `<div class="daily-bar" title="Tanggal ${item.day}: ${rupiah(item.total)}"><span style="height:${item.total ? Math.max(4, item.total / maxDaily * 100) : 0}%"></span>${item.day === 1 || item.day === daysInMonth || item.day % 5 === 0 ? `<small>${item.day}</small>` : ''}</div>`).join('')}</div></section>
-    <section class="surface-panel monitoring-ranking"><div class="panel-heading"><div><h3>Habis untuk apa?</h3><small>Urutan kategori berdasarkan pengeluaran bulan ini.</small></div><span class="panel-count">${ranking.length}</span></div>${ranking.length ? `<ol>${ranking.map((item) => `<li><div><span>${escapeHtml(item.label)}</span><div class="monitoring-rank-track"><i style="width:${total ? item.amount / total * 100 : 0}%"></i></div></div><strong>${rupiah(item.amount)}</strong><small>${total ? Math.round(item.amount / total * 100) : 0}%</small></li>`).join('')}</ol>` : '<div class="empty">Belum ada pengeluaran konsumtif pada periode ini.</div>'}</section>
+    <section class="surface-panel monitoring-ranking"><div class="panel-heading"><div><h3>Habis untuk apa?</h3><small>Lima kategori dengan pengeluaran tertinggi.</small></div><span class="panel-count">${ranking.length}</span></div>${ranking.length ? `<ol>${ranking.slice(0, 5).map((item) => `<li><div><span>${escapeHtml(item.label)}</span><div class="monitoring-rank-track"><i style="width:${total ? item.amount / total * 100 : 0}%"></i></div></div><strong>${rupiah(item.amount)}</strong><small>${total ? Math.round(item.amount / total * 100) : 0}%</small></li>`).join('')}</ol>` : '<div class="empty">Belum ada pengeluaran konsumtif pada periode ini.</div>'}</section>
   </div>`;
 }
 

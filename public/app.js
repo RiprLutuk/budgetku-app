@@ -264,7 +264,7 @@ function render() {
       if (active) button.setAttribute("aria-current", "page");
       else button.removeAttribute("aria-current");
     });
-  moreButton.classList.toggle("active", ["receipts", "family", "users", "settings"].includes(currentView));
+  moreButton.classList.toggle("active", ["monitoring", "receipts", "family", "users", "settings"].includes(currentView));
   monthControl.hidden = !["dashboard", "transactions", "budget", "monitoring"].includes(currentView);
   privacyButton.hidden = currentView !== "dashboard";
   document.querySelector("#quickAdd").hidden = currentView !== "dashboard";
