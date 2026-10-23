@@ -6132,6 +6132,10 @@ button.is-pending, [aria-busy="true"] button[type="submit"] { cursor:wait; }.deb
 @keyframes button-spin { to { transform:rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .button-spinner { animation:none; } }
 
+/* Monitoring is a short decision dashboard, not a complete report. */
+.monitoring-content { gap:8px; }.monitoring-intro { padding:0; }.monitoring-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }.monitoring-kpis article { padding:10px 12px; border-radius:12px; }.monitoring-chart-panel { padding:12px 14px; }.monitoring-chart-panel .panel-heading { margin-bottom:2px; }.daily-chart { height:86px; margin-top:7px; }.monitoring-insight-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }.monitoring-highlight, .monitoring-members { display:grid; gap:3px; min-width:0; padding:11px 12px; }.monitoring-highlight > span, .monitoring-members > span { color:var(--muted); font-size:10px; }.monitoring-highlight strong, .monitoring-members strong { overflow:hidden; color:var(--dark); font-size:14px; text-overflow:ellipsis; white-space:nowrap; }.monitoring-highlight small, .monitoring-members small { overflow:hidden; color:var(--muted); font-size:10px; text-overflow:ellipsis; white-space:nowrap; }.monitoring-ranking { padding:12px 14px; }.monitoring-ranking ol { gap:7px; margin-top:8px; }.monitoring-receivables { padding:12px 14px; }
+@media (max-width:760px) { .daily-chart { height:78px; }.monitoring-chart-panel, .monitoring-ranking, .monitoring-receivables { padding:12px; }.monitoring-highlight, .monitoring-members { padding:10px 11px; } }
+
 dialog.month-dialog,
 .confirm-dialog {
   width: min(calc(100% - 28px), 360px);
