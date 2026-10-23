@@ -5849,6 +5849,14 @@ dialog.month-dialog,
   max-width: calc(100% - 28px);
 }
 
+/* Debt tracking stays summary-first; the entry form is disclosed on demand. */
+.debts-content { gap: 10px; }
+.debt-summary { gap: 10px; }
+.debt-summary article { gap: 2px; padding: 11px 13px; border-radius: 14px; }
+.debt-summary strong { font-size: 18px; }
+.debt-create { display: flex; justify-content: flex-end; }
+.debt-create .primary { min-height: 36px; padding-inline: 12px; font-size: 11px; }
+
 /* Native selects hand scrolling and momentum to the phone OS. The visual
    treatment stays consistent with the rest of the app without competing with
    touch gestures inside a custom wheel. */
