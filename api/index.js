@@ -341,7 +341,7 @@ function debtFields(body) {
 
 app.post('/api/debts', async (c) => {
   const user = await requireUser(c); const household = await requireHousehold(c, user); const db = getDb(c.env.DB); const debt = debtFields(await readJson(c)); const debtId = id();
-  if (debt.evidenceKey && !debt.evidenceKey.startsWith(`debt-evidence/${household.id}/`) || (debt.evidenceKey && !(await c.env.EVIDENCE.head(debt.evidenceKey)))) throw new HTTPException(400, { message: 'Bukti dokumen tidak ditemukan.' });
+  if (debt.evidenceKey && (!debt.evidenceKey.startsWith(`debt-evidence/${household.id}/`) || !(await c.env.EVIDENCE.head(debt.evidenceKey)))) throw new HTTPException(400, { message: 'Bukti dokumen tidak ditemukan.' });
   await db.execute({ sql: 'INSERT INTO debts(id,household_id,created_by,direction,person_name,principal,issued_date,due_date,note,repayment_mode,evidence_key,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)', args: [debtId, household.id, user.id, debt.direction, debt.personName, debt.principal, debt.issuedDate, debt.dueDate, debt.note, debt.repaymentMode, debt.evidenceKey, now()] });
   return json(c, { id: debtId }, 201);
 });
@@ -352,8 +352,16 @@ app.post('/api/debt-evidence', async (c) => {
   if (!(file instanceof File)) throw new HTTPException(400, { message: 'Pilih foto atau dokumen bukti.' });
   const types = new Set(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']);
   if (!types.has(file.type) || file.size < 16 || file.size > 5 * 1024 * 1024) throw new HTTPException(400, { message: 'Bukti harus JPG, PNG, WebP, atau PDF dengan ukuran maksimal 5 MB.' });
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const signatures = {
+    'image/jpeg': bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff,
+    'image/png': bytes.slice(0, 8).every((value, index) => value === [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a][index]),
+    'image/webp': new TextDecoder().decode(bytes.slice(0, 4)) === 'RIFF' && new TextDecoder().decode(bytes.slice(8, 12)) === 'WEBP',
+    'application/pdf': new TextDecoder().decode(bytes.slice(0, 5)) === '%PDF-',
+  };
+  if (!signatures[file.type]) throw new HTTPException(400, { message: 'Isi bukti tidak sesuai dengan format file.' });
   const key = `debt-evidence/${household.id}/${id()}`;
-  await c.env.EVIDENCE.put(key, file.stream(), { httpMetadata: { contentType: file.type, contentDisposition: `inline; filename="${file.name.replace(/["\\]/g, '_')}"` } });
+  await c.env.EVIDENCE.put(key, bytes, { httpMetadata: { contentType: file.type, contentDisposition: `inline; filename="${file.name.replace(/["\\]/g, '_')}"` } });
   return json(c, { key });
 });
 

@@ -5858,6 +5858,7 @@ dialog.month-dialog,
 .debt-create { display: flex; justify-content: flex-end; }
 .debt-create .primary { min-height: 36px; padding-inline: 12px; font-size: 11px; }
 .debt-evidence small, .repayment-hint { display:block; margin-top:4px; color:var(--muted); font-size:10px; line-height:1.35; }
+.debt-actions .debt-evidence-link { min-height:30px; padding-inline:8px; font-size:10px; text-decoration:none; }
 .monitoring-receivables { display:grid; gap:10px; }
 .receivable-total { display:flex; align-items:baseline; justify-content:space-between; gap:10px; padding:9px 10px; border-radius:10px; background:var(--primary-soft); color:var(--primary); }
 .receivable-total span { font-size:11px; font-weight:700; }.receivable-total strong { font-family:var(--font-data); font-size:15px; }
