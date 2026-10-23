@@ -3,6 +3,7 @@ import { closeSelects, icon } from "./ui.js";
 import { localDateValue, validateForm, withPendingForm } from "./forms.js";
 import { renderGoals as renderGoalsView } from "./views/goals.js";
 import { renderSettings as renderSettingsView } from "./views/settings.js";
+import { renderDebts as renderDebtsView } from "./views/debts.js";
 import { createTransactionDialog } from "./components/transaction-dialog.js";
 import { financialHealth, summarizeCashflow } from "./cashflow.js";
 import { goalPlan } from "./goal-math.js";
@@ -264,7 +265,7 @@ function render() {
       if (active) button.setAttribute("aria-current", "page");
       else button.removeAttribute("aria-current");
     });
-  moreButton.classList.toggle("active", ["monitoring", "receipts", "family", "users", "settings"].includes(currentView));
+  moreButton.classList.toggle("active", ["monitoring", "debts", "receipts", "family", "users", "settings"].includes(currentView));
   monthControl.hidden = !["dashboard", "transactions", "budget", "monitoring"].includes(currentView);
   privacyButton.hidden = currentView !== "dashboard";
   document.querySelector("#quickAdd").hidden = currentView !== "dashboard";
@@ -274,6 +275,7 @@ function render() {
     budget: "Auto Budget",
     goals: "Tabungan",
     monitoring: "Monitoring",
+    debts: "Hutang & Piutang",
     receipts: "Nota & Gmail",
     family: "Keluarga",
     users: "Kelola User",
@@ -285,6 +287,7 @@ function render() {
   if (currentView === "budget") return renderBudget();
   if (currentView === "goals") return renderGoals();
   if (currentView === "monitoring") return renderMonitoring();
+  if (currentView === "debts") return renderDebts();
   if (currentView === "receipts") return renderReceipts();
   if (currentView === "family") return renderFamily();
   if (currentView === "users") return renderUsers();
@@ -364,6 +367,7 @@ function renderDashboard() {
 function renderMonitoring() {
   renderMonitoringView(app, { snapshot, currentMonth, rupiah });
 }
+function renderDebts() { renderDebtsView(app, { snapshot, api, refresh: refreshSnapshot, toast }); }
 function renderTransactions() {
   renderTransactionsView(app, { snapshot, currentMonth, rupiah, onBind: bindCommon, onExportCsv: downloadTransactions });
 }
@@ -1005,7 +1009,7 @@ document.querySelector("#quickAdd").onclick = () => {
 document.querySelectorAll("dialog").forEach((dialog) => {
   dialog.addEventListener("close", closeSelects);
 });
-const navigationIcons = { dashboard: "overview", transactions: "ledger", budget: "allocation", goals: "target", monitoring: "health", receipts: "receipt", family: "family", users: "admin", settings: "sliders" };
+const navigationIcons = { dashboard: "overview", transactions: "ledger", budget: "allocation", goals: "target", monitoring: "health", debts: "wallet", receipts: "receipt", family: "family", users: "admin", settings: "sliders" };
 document.querySelectorAll(".nav").forEach((button) => {
   button.querySelector(".nav-icon").innerHTML = icon(navigationIcons[button.dataset.view]);
 });

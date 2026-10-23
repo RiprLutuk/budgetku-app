@@ -301,13 +301,14 @@ app.get("/api/snapshot", async (c) => {
   const monthEnd = new Date(`${month}-01T00:00:00Z`);
   monthEnd.setUTCMonth(monthEnd.getUTCMonth() + 1, 0);
   const asOf = monthEnd.toISOString().slice(0, 10) < today ? monthEnd.toISOString().slice(0, 10) : today;
-  const [members, categories, transactions, goals, monthlySummary, assets] = await Promise.all([
+  const [members, categories, transactions, goals, monthlySummary, assets, debts] = await Promise.all([
     db.execute({ sql: `SELECT u.id,u.name,u.email,m.role FROM household_members m JOIN users u ON u.id=m.user_id WHERE m.household_id=? ORDER BY m.joined_at`, args: [household.id] }),
     db.execute({ sql: "SELECT id,name,pct,sort_order FROM categories WHERE household_id=? ORDER BY sort_order", args: [household.id] }),
     db.execute({ sql: `SELECT t.*,u.name AS created_by_name,c.name AS category_name,g.name AS goal_name FROM transactions t JOIN users u ON u.id=t.user_id LEFT JOIN categories c ON c.id=t.category_id AND c.household_id=t.household_id LEFT JOIN goals g ON g.id=t.goal_id AND g.household_id=t.household_id WHERE t.household_id=? AND t.tx_date>=? AND t.tx_date<=? ORDER BY tx_date DESC,created_at DESC,t.id DESC`, args: [household.id, `${month}-01`, asOf] }),
     db.execute({ sql: GOALS_SNAPSHOT_SQL, args: [asOf, household.id] }),
     db.execute({ sql: MONTHLY_SUMMARY_SQL, args: [household.id, asOf] }),
     db.execute({ sql: "SELECT id,name,asset_type,acquisition_cost,current_value,acquired_at FROM assets WHERE household_id=? AND disposed_at IS NULL ORDER BY acquired_at DESC,created_at DESC", args: [household.id] }),
+    db.execute({ sql: `SELECT d.*,COALESCE(SUM(p.amount),0) AS paid_amount FROM debts d LEFT JOIN debt_payments p ON p.debt_id=d.id AND p.household_id=d.household_id WHERE d.household_id=? GROUP BY d.id ORDER BY CASE WHEN d.due_date IS NULL THEN 1 ELSE 0 END,d.due_date,d.created_at DESC`, args: [household.id] }),
   ]);
   return json(c, {
     month,
@@ -319,8 +320,36 @@ app.get("/api/snapshot", async (c) => {
     goals: goals.rows,
     monthlySummary: monthlySummary.rows,
     assets: assets.rows,
+    debts: debts.rows,
     realtime: c.env.REALTIME === "events" ? "events" : "polling",
   });
+});
+
+function debtFields(body) {
+  const direction = body.direction;
+  const personName = String(body.personName || '').trim();
+  const principal = body.principal;
+  const issuedDate = body.issuedDate;
+  const dueDate = body.dueDate || null;
+  const note = String(body.note || '').trim();
+  if (!['payable', 'receivable'].includes(direction) || !personName || personName.length > 80 || !validMoney(principal, 1) || !validDate(issuedDate) || (dueDate && !validDate(dueDate)) || note.length > 255) throw new HTTPException(400, { message: 'Lengkapi pihak, nominal, dan tanggal dengan benar.' });
+  return { direction, personName, principal, issuedDate, dueDate, note };
+}
+
+app.post('/api/debts', async (c) => {
+  const user = await requireUser(c); const household = await requireHousehold(c, user); const debt = debtFields(await readJson(c)); const debtId = id();
+  await getDb(c.env.DB).execute({ sql: 'INSERT INTO debts(id,household_id,created_by,direction,person_name,principal,issued_date,due_date,note,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)', args: [debtId, household.id, user.id, debt.direction, debt.personName, debt.principal, debt.issuedDate, debt.dueDate, debt.note, now()] });
+  return json(c, { id: debtId }, 201);
+});
+
+app.post('/api/debts/:id/payments', async (c) => {
+  const user = await requireUser(c); const household = await requireHousehold(c, user); const db = getDb(c.env.DB); const body = await readJson(c);
+  const debt = await queryOne(db, `SELECT d.*,COALESCE(SUM(p.amount),0) AS paid_amount FROM debts d LEFT JOIN debt_payments p ON p.debt_id=d.id WHERE d.id=? AND d.household_id=? GROUP BY d.id`, [c.req.param('id'), household.id]);
+  const amount = body.amount; const paidDate = body.paidDate; const note = String(body.note || '').trim();
+  if (!debt) throw new HTTPException(404, { message: 'Catatan hutang/piutang tidak ditemukan.' });
+  if (!validMoney(amount, 1) || amount > Number(debt.principal) - Number(debt.paid_amount) || !validDate(paidDate) || note.length > 255) throw new HTTPException(400, { message: 'Pembayaran melebihi sisa atau data tidak valid.' });
+  await db.execute({ sql: 'INSERT INTO debt_payments(id,debt_id,household_id,created_by,amount,paid_date,note,created_at) VALUES(?,?,?,?,?,?,?,?)', args: [id(), debt.id, household.id, user.id, amount, paidDate, note, now()] });
+  return json(c, { ok: true });
 });
 
 async function saveTransaction(c) {
