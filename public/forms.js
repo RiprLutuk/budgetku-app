@@ -28,7 +28,14 @@ export async function withPendingForm(form, action) {
   pendingForms.add(form);
   const controls = [...form.querySelectorAll("button, input, select, textarea")];
   const disabled = controls.map((control) => control.disabled);
+  const submit = form.querySelector('button[type="submit"]:not([formnovalidate])');
+  const submitHtml = submit?.innerHTML;
   form.setAttribute("aria-busy", "true");
+  if (submit) {
+    submit.classList.add("is-pending");
+    submit.setAttribute("aria-label", "Menyimpan, mohon tunggu");
+    submit.innerHTML = '<span class="button-spinner" aria-hidden="true"></span>Menyimpan…';
+  }
   controls.forEach((control) => { control.disabled = true; });
   try {
     const result = await action();
@@ -36,6 +43,11 @@ export async function withPendingForm(form, action) {
     return result;
   } finally {
     controls.forEach((control, index) => { control.disabled = disabled[index]; });
+    if (submit?.isConnected) {
+      submit.classList.remove("is-pending");
+      submit.removeAttribute("aria-label");
+      submit.innerHTML = submitHtml;
+    }
     form.removeAttribute("aria-busy");
     pendingForms.delete(form);
   }

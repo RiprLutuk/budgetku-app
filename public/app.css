@@ -6127,6 +6127,11 @@ body.menu-open main {
 .debt-form-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }.debt-form-fields .form-grid { display:contents; }.debt-form-fields > label { min-width:0; margin:0; font-size:11px; }.debt-form-fields > label input, .debt-form-fields > label select { min-height:36px; padding:7px 9px; font-size:12px; }.debt-form-fields .debt-evidence, .debt-form-fields .debt-note, .debt-form-fields .form-footer { grid-column:1 / -1; }.debt-form-fields .form-footer { margin-top:0; }.debt-form-fields .form-footer > span { display:none; }.debt-form-fields .form-footer .primary { min-height:34px; padding-inline:12px; font-size:11px; }
 @media (max-width:760px) { .debt-summary article { padding:8px 9px; }.debt-summary strong { font-size:15px; }.debt-active-panel, .debt-form-panel { padding:11px 12px; }.debt-row p { max-width:140px; }.debt-form-fields { gap:7px; }.debt-form-fields > label input, .debt-form-fields > label select { min-height:34px; font-size:11px; } }
 
+.button-spinner { display:inline-block; width:12px; height:12px; border:2px solid currentColor; border-right-color:transparent; border-radius:50%; animation:button-spin .7s linear infinite; }
+button.is-pending, [aria-busy="true"] button[type="submit"] { cursor:wait; }.debt-actions > .secondary, .debt-actions > .icon-btn { display:inline-flex; align-items:center; justify-content:center; box-sizing:border-box; min-height:36px; height:36px; }.debt-actions > .icon-btn { width:36px; min-width:36px; padding:0; }.debt-actions > .secondary { min-width:92px; padding-inline:10px; }.debt-actions > button:disabled { opacity:.8; }
+@keyframes button-spin { to { transform:rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .button-spinner { animation:none; } }
+
 dialog.month-dialog,
 .confirm-dialog {
   width: min(calc(100% - 28px), 360px);
