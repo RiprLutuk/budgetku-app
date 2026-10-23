@@ -29,6 +29,7 @@ let me = null,
 const app = document.querySelector("#app"),
   authScreen = document.querySelector("#authScreen"),
   shell = document.querySelector("#shell"),
+  appMain = shell.querySelector("main"),
   pageTitle = document.querySelector("#pageTitle");
 const monthControl = document.querySelector("#monthControl"),
   monthPicker = document.querySelector("#monthPicker"),
@@ -851,7 +852,7 @@ function navigate(view) {
   monthPicker.blur();
   setMoreOpen(false);
   render();
-  window.scrollTo({ top: 0, behavior: "instant" });
+  appMain.scrollTo({ top: 0, behavior: "instant" });
   if (fromMenu) pageTitle.focus({ preventScroll: true });
 }
 function applyNavigation(state) {
@@ -888,7 +889,7 @@ function canRefreshView() {
     ![...app.querySelectorAll('input[type="file"]')].some((input) => input.files.length);
 }
 const pullRefresh = createPullRefresh({
-  root: shell.querySelector("main"),
+  root: appMain,
   indicator: document.querySelector("#pullRefresh"),
   canRefresh: canRefreshView,
   onRefresh: async () => {

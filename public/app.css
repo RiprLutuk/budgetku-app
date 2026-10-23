@@ -6013,9 +6013,15 @@ dialog:not(.more-dialog) .dialog-card {
    preview/browser chrome on a few mobile webviews, which creates a phantom
    horizontal scroll area. */
 html {
+  height: 100%;
   max-width: 100%;
   overflow-x: clip;
-  overflow-y: auto;
+  overflow-y: hidden;
+}
+
+body {
+  height: 100%;
+  overflow: hidden;
 }
 
 .app-shell,
@@ -6031,6 +6037,30 @@ dialog.month-dialog,
 dialog.more-dialog {
   width: min(calc(100% - 28px), 520px);
   max-width: calc(100% - 28px);
+}
+
+/* One scrolling owner at every viewport size.  Keeping desktop on the document
+   while mobile scrolls inside `main` makes scroll availability depend on the
+   browser/PWA host. */
+.app-shell {
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+main {
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  overflow-x: clip;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+body.menu-open main {
+  overflow: hidden;
 }
 
 dialog.month-dialog,
