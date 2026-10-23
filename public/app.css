@@ -916,9 +916,6 @@ fieldset {
   margin-top: 10px;
 }
 
-.content.budget-content {
-  max-width: 880px;
-}
 .surface-panel.budget-panel {
   padding: 18px 20px;
 }
@@ -1379,7 +1376,6 @@ dialog::backdrop {
 }
 
 /* User management reads as a compact account list instead of a scrolling table. */
-.users-content { max-width: 860px; }
 .users-panel { padding: 16px; }
 .users-heading { align-items: center; margin-bottom: 12px; }
 .users-heading h3 { margin: 0; }
@@ -1405,7 +1401,7 @@ dialog::backdrop {
 }
 
 /* Utility pages share the same compact, mobile-first layout. */
-.utilities-content { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; max-width: 920px; }
+.utilities-content { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .utility-card { min-width: 0; padding: 15px; border-radius: 16px; }
 .utility-card .section-title { align-items: flex-start; margin-bottom: 12px; }
 .utility-card .section-title h3 { margin: 0; font-size: 16px; }
@@ -1433,7 +1429,7 @@ dialog::backdrop {
 .invite-card .code-box { padding: 8px 9px; font-size: 10px; }
 
 /* Settings keeps form decisions compact and visually aligned with the other utility pages. */
-.settings-grid { gap: 12px; max-width: 920px; }
+.settings-grid { gap: 12px; }
 .settings-grid > .card { padding: 15px; border-radius: 16px; }
 .settings-grid .section-title { margin-bottom: 12px; }
 .settings-grid .section-title h3 { font-size: 16px; }
@@ -3047,7 +3043,7 @@ button:active {
   height: 44px;
   flex: 0 0 44px;
 }
-.menu-open {
+body.menu-open {
   overflow: hidden;
 }
 .more-sheet h2 {
@@ -5210,10 +5206,6 @@ body {
 }
 
 /* Budget: one decision first, then the categories that need it. */
-#app[data-view="budget"] .budget-content {
-  max-width: 760px;
-}
-
 #app[data-view="budget"] .budget-panel {
   padding: 16px;
 }
@@ -5486,16 +5478,17 @@ body {
   --title-page: 22px;
   --title-section: 16px;
   --text-meta: 11px;
+  --page-content-width: 1180px;
 }
 
 #app[data-view] .content {
-  width: min(100%, 1180px);
+  width: min(100%, var(--page-content-width));
   margin-inline: auto;
   padding-bottom: max(32px, env(safe-area-inset-bottom, 0px));
 }
 
 .page-tools {
-  width: min(100%, 1180px);
+  width: min(100%, var(--page-content-width));
   gap: var(--space-3);
 }
 

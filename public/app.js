@@ -924,7 +924,14 @@ function setMoreOpen(open) {
     if (!moreDialog.open) moreDialog.showModal();
     document.body.classList.add("menu-open");
     moreButton.setAttribute("aria-expanded", "true");
-  } else if (moreDialog.open) moreDialog.close();
+    return;
+  }
+
+  // Keep page scrolling available even if the dialog was closed outside this
+  // helper (for example after a viewport change or a browser-level dismissal).
+  if (moreDialog.open) moreDialog.close();
+  document.body.classList.remove("menu-open");
+  moreButton.setAttribute("aria-expanded", "false");
 }
 moreButton.onclick = () => setMoreOpen(true);
 moreDialog.querySelector(".more-close").onclick = () => setMoreOpen(false);
