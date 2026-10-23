@@ -5857,6 +5857,12 @@ dialog.month-dialog,
 .debt-summary strong { font-size: 16px; line-height: 1.25; }
 .debt-create { display: flex; justify-content: flex-end; }
 .debt-create .primary { min-height: 36px; padding-inline: 12px; font-size: 11px; }
+.debt-evidence small, .repayment-hint { display:block; margin-top:4px; color:var(--muted); font-size:10px; line-height:1.35; }
+.monitoring-receivables { display:grid; gap:10px; }
+.receivable-total { display:flex; align-items:baseline; justify-content:space-between; gap:10px; padding:9px 10px; border-radius:10px; background:var(--primary-soft); color:var(--primary); }
+.receivable-total span { font-size:11px; font-weight:700; }.receivable-total strong { font-family:var(--font-data); font-size:15px; }
+.receivable-list { display:grid; }.receivable-list > div { display:grid; grid-template-columns:1fr auto; gap:2px 10px; align-items:baseline; padding:8px 0; border-top:1px solid var(--border); }
+.receivable-list span { font-size:12px; font-weight:700; }.receivable-list small { color:var(--muted); font-size:10px; }.receivable-list small.bad { color:var(--bad); }.receivable-list strong { grid-row:1 / span 2; grid-column:2; font-family:var(--font-data); font-size:11px; }
 
 /* Native selects hand scrolling and momentum to the phone OS. The visual
    treatment stays consistent with the rest of the app without competing with

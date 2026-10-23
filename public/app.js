@@ -81,9 +81,9 @@ function toast(msg) {
 }
 async function api(url, opt = {}) {
   const headers = {
-    "Content-Type": "application/json",
     ...(opt.headers || {}),
   };
+  if (!(opt.body instanceof FormData) && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
   if (activeHouseholdId) headers["x-household-id"] = activeHouseholdId;
   const r = await fetch(url, { ...opt, headers });
   const data = await r.json().catch(() => ({}));

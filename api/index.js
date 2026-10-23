@@ -332,14 +332,39 @@ function debtFields(body) {
   const issuedDate = body.issuedDate;
   const dueDate = body.dueDate || null;
   const note = String(body.note || '').trim();
+  const repaymentMode = body.repaymentMode === 'lump_sum' ? 'lump_sum' : 'installment';
+  const evidenceKey = body.evidenceKey ? String(body.evidenceKey).trim() : null;
   if (!['payable', 'receivable'].includes(direction) || !personName || personName.length > 80 || !validMoney(principal, 1) || !validDate(issuedDate) || (dueDate && !validDate(dueDate)) || note.length > 255) throw new HTTPException(400, { message: 'Lengkapi pihak, nominal, dan tanggal dengan benar.' });
-  return { direction, personName, principal, issuedDate, dueDate, note };
+  if (direction === 'receivable' && !evidenceKey) throw new HTTPException(400, { message: 'Bukti foto atau dokumen wajib untuk piutang.' });
+  return { direction, personName, principal, issuedDate, dueDate, note, repaymentMode, evidenceKey };
 }
 
 app.post('/api/debts', async (c) => {
-  const user = await requireUser(c); const household = await requireHousehold(c, user); const debt = debtFields(await readJson(c)); const debtId = id();
-  await getDb(c.env.DB).execute({ sql: 'INSERT INTO debts(id,household_id,created_by,direction,person_name,principal,issued_date,due_date,note,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)', args: [debtId, household.id, user.id, debt.direction, debt.personName, debt.principal, debt.issuedDate, debt.dueDate, debt.note, now()] });
+  const user = await requireUser(c); const household = await requireHousehold(c, user); const db = getDb(c.env.DB); const debt = debtFields(await readJson(c)); const debtId = id();
+  if (debt.evidenceKey && !debt.evidenceKey.startsWith(`debt-evidence/${household.id}/`) || (debt.evidenceKey && !(await c.env.EVIDENCE.head(debt.evidenceKey)))) throw new HTTPException(400, { message: 'Bukti dokumen tidak ditemukan.' });
+  await db.execute({ sql: 'INSERT INTO debts(id,household_id,created_by,direction,person_name,principal,issued_date,due_date,note,repayment_mode,evidence_key,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)', args: [debtId, household.id, user.id, debt.direction, debt.personName, debt.principal, debt.issuedDate, debt.dueDate, debt.note, debt.repaymentMode, debt.evidenceKey, now()] });
   return json(c, { id: debtId }, 201);
+});
+
+app.post('/api/debt-evidence', async (c) => {
+  const user = await requireUser(c); const household = await requireHousehold(c, user);
+  const form = await c.req.formData(); const file = form.get('file');
+  if (!(file instanceof File)) throw new HTTPException(400, { message: 'Pilih foto atau dokumen bukti.' });
+  const types = new Set(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']);
+  if (!types.has(file.type) || file.size < 16 || file.size > 5 * 1024 * 1024) throw new HTTPException(400, { message: 'Bukti harus JPG, PNG, WebP, atau PDF dengan ukuran maksimal 5 MB.' });
+  const key = `debt-evidence/${household.id}/${id()}`;
+  await c.env.EVIDENCE.put(key, file.stream(), { httpMetadata: { contentType: file.type, contentDisposition: `inline; filename="${file.name.replace(/["\\]/g, '_')}"` } });
+  return json(c, { key });
+});
+
+app.get('/api/debt-evidence/:id', async (c) => {
+  const user = await requireUser(c); const db = getDb(c.env.DB);
+  const debt = await queryOne(db, `SELECT d.evidence_key FROM debts d JOIN household_members m ON m.household_id=d.household_id WHERE d.id=? AND m.user_id=?`, [c.req.param('id'), user.id]);
+  if (!debt?.evidence_key) throw new HTTPException(404, { message: 'Bukti tidak ditemukan.' });
+  const object = await c.env.EVIDENCE.get(debt.evidence_key);
+  if (!object) throw new HTTPException(404, { message: 'Bukti tidak ditemukan.' });
+  c.header('Content-Type', object.httpMetadata?.contentType || 'application/octet-stream'); c.header('Content-Disposition', object.httpMetadata?.contentDisposition || 'inline'); c.header('Cache-Control', 'private, no-store');
+  return c.body(object.body);
 });
 
 app.post('/api/debts/:id/payments', async (c) => {
@@ -347,19 +372,22 @@ app.post('/api/debts/:id/payments', async (c) => {
   const debt = await queryOne(db, `SELECT d.*,COALESCE(SUM(p.amount),0) AS paid_amount FROM debts d LEFT JOIN debt_payments p ON p.debt_id=d.id WHERE d.id=? AND d.household_id=? GROUP BY d.id`, [c.req.param('id'), household.id]);
   const amount = body.amount; const paidDate = body.paidDate; const note = String(body.note || '').trim();
   if (!debt) throw new HTTPException(404, { message: 'Catatan hutang/piutang tidak ditemukan.' });
-  if (!validMoney(amount, 1) || amount > Number(debt.principal) - Number(debt.paid_amount) || !validDate(paidDate) || note.length > 255) throw new HTTPException(400, { message: 'Pembayaran melebihi sisa atau data tidak valid.' });
+  const remaining = Number(debt.principal) - Number(debt.paid_amount);
+  if (!validMoney(amount, 1) || amount > remaining || !validDate(paidDate) || note.length > 255) throw new HTTPException(400, { message: 'Pembayaran melebihi sisa atau data tidak valid.' });
+  if (debt.repayment_mode === 'lump_sum' && amount !== remaining) throw new HTTPException(400, { message: 'Piutang ini disetel wajib lunas sekali bayar.' });
   await db.execute({ sql: 'INSERT INTO debt_payments(id,debt_id,household_id,created_by,amount,paid_date,note,created_at) VALUES(?,?,?,?,?,?,?,?)', args: [id(), debt.id, household.id, user.id, amount, paidDate, note, now()] });
   return json(c, { ok: true });
 });
 
 app.delete('/api/debts/:id', async (c) => {
   const user = await requireUser(c); const household = await requireHousehold(c, user); const db = getDb(c.env.DB);
-  const debt = await queryOne(db, 'SELECT id FROM debts WHERE id=? AND household_id=?', [c.req.param('id'), household.id]);
+  const debt = await queryOne(db, 'SELECT id,evidence_key FROM debts WHERE id=? AND household_id=?', [c.req.param('id'), household.id]);
   if (!debt) throw new HTTPException(404, { message: 'Catatan hutang/piutang tidak ditemukan.' });
   await db.batch([
     { sql: 'DELETE FROM debt_payments WHERE debt_id=? AND household_id=?', args: [debt.id, household.id] },
     { sql: 'DELETE FROM debts WHERE id=? AND household_id=?', args: [debt.id, household.id] },
   ]);
+  if (debt.evidence_key) await c.env.EVIDENCE.delete(debt.evidence_key);
   return json(c, { ok: true });
 });
 

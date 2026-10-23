@@ -17,5 +17,11 @@
       "database_id": "f80a3dac-919c-44dc-9a51-df160f29f3db",
       "migrations_dir": "migrations"
     }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "EVIDENCE",
+      "bucket_name": "budgetku-evidence"
+    }
   ]
 }

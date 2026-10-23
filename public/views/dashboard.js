@@ -165,6 +165,10 @@ export function renderMonitoring(container, { snapshot, currentMonth, rupiah }) 
   const top = ranking[0];
   const average = trackedDays ? total / trackedDays : 0;
   const peak = daily.reduce((winner, item) => item.total > winner.total ? item : winner, daily[0]);
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const receivables = (snapshot.debts || []).map((item) => ({ ...item, remaining: Number(item.principal) - Number(item.paid_amount) })).filter((item) => item.direction === 'receivable' && item.remaining > 0);
+  const receivableTotal = receivables.reduce((sum, item) => sum + item.remaining, 0);
+  const overdueReceivables = receivables.filter((item) => item.due_date && item.due_date < todayKey);
 
   container.innerHTML = `<div class="content monitoring-content">
     <section class="monitoring-intro"><p>Belanja konsumtif ${escapeHtml(monitoringMonthLabel(currentMonth))}. Tabungan dan pembelian aset tidak dihitung.</p></section>
@@ -176,6 +180,7 @@ export function renderMonitoring(container, { snapshot, currentMonth, rupiah }) 
     </section>
     <section class="surface-panel monitoring-chart-panel"><div class="panel-heading"><div><h3>Belanja harian</h3><small>Bandingkan lonjakan antarhari untuk menemukan kebiasaan belanja.</small></div><strong>${rupiah(total)}</strong></div><div class="daily-chart" role="img" aria-label="Chart belanja harian ${escapeHtml(monitoringMonthLabel(currentMonth))}">${daily.map((item) => `<div class="daily-bar" title="Tanggal ${item.day}: ${rupiah(item.total)}"><span style="height:${item.total ? Math.max(4, item.total / maxDaily * 100) : 0}%"></span>${item.day === 1 || item.day === daysInMonth || item.day % 5 === 0 ? `<small>${item.day}</small>` : ''}</div>`).join('')}</div></section>
     <section class="surface-panel monitoring-ranking"><div class="panel-heading"><div><h3>Habis untuk apa?</h3><small>Lima kategori dengan pengeluaran tertinggi.</small></div><span class="panel-count">${ranking.length}</span></div>${ranking.length ? `<ol>${ranking.slice(0, 5).map((item) => `<li><div><span>${escapeHtml(item.label)}</span><div class="monitoring-rank-track"><i style="width:${total ? item.amount / total * 100 : 0}%"></i></div></div><strong>${rupiah(item.amount)}</strong><small>${total ? Math.round(item.amount / total * 100) : 0}%</small></li>`).join('')}</ol>` : '<div class="empty">Belum ada pengeluaran konsumtif pada periode ini.</div>'}</section>
+    <section class="surface-panel monitoring-receivables"><div class="panel-heading"><div><h3>Monitoring piutang</h3><small>${overdueReceivables.length ? `${overdueReceivables.length} melewati jatuh tempo` : 'Semua piutang aktif terpantau'}</small></div><button class="text-action" data-go="debts">Kelola ${icon('arrow')}</button></div><div class="receivable-total"><span>Total akan diterima</span><strong>${rupiah(receivableTotal)}</strong></div>${receivables.length ? `<div class="receivable-list">${receivables.slice(0, 3).map((item) => `<div><span>${escapeHtml(item.person_name)}</span><small class="${item.due_date && item.due_date < todayKey ? 'bad' : ''}">${item.due_date ? `Jatuh tempo ${escapeHtml(item.due_date)}` : 'Tanpa jatuh tempo'}</small><strong>${rupiah(item.remaining)}</strong></div>`).join('')}</div>` : '<div class="empty">Belum ada piutang aktif.</div>'}</section>
   </div>`;
 }
 
