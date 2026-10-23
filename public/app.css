@@ -5852,8 +5852,9 @@ dialog.month-dialog,
 /* Debt tracking stays summary-first; the entry form is disclosed on demand. */
 .debts-content { gap: 10px; }
 .debt-summary { gap: 10px; }
-.debt-summary article { gap: 2px; padding: 11px 13px; border-radius: 14px; }
-.debt-summary strong { font-size: 18px; }
+.debt-summary article { gap: 1px; min-height: 0; padding: 8px 11px; border-radius: 12px; }
+.debt-summary span, .debt-summary small { font-size: 10px; }
+.debt-summary strong { font-size: 16px; line-height: 1.25; }
 .debt-create { display: flex; justify-content: flex-end; }
 .debt-create .primary { min-height: 36px; padding-inline: 12px; font-size: 11px; }
 
