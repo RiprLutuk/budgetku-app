@@ -81,6 +81,41 @@ export function searchableSelect(host, { name, label, options, value = '', input
   host.selectControl?.destroy();
   const identifier = `suggest-${++selectId}`;
   host.classList.add('search-select');
+
+  // A fixed popover and an input blur race on touch devices: tapping an option
+  // can close the list before its click event fires. Use the platform picker
+  // on compact screens so the control remains reliably selectable and
+  // navigable with touch, keyboard, and assistive technology.
+  if (window.matchMedia('(max-width: 760px)').matches) {
+    const selected = String(value);
+    host.innerHTML = `<select class="search-select-native"></select>`;
+    const select = host.querySelector('select');
+    select.name = name;
+    select.id = inputId || identifier;
+    select.setAttribute('aria-label', label);
+    if (describedBy) select.setAttribute('aria-describedby', describedBy);
+    for (const item of options) {
+      const option = document.createElement('option');
+      option.value = String(item.value);
+      option.textContent = item.label;
+      option.selected = option.value === selected;
+      select.append(option);
+    }
+    const control = {
+      host,
+      get value() { return select.value; },
+      set value(next) { select.value = String(next ?? ''); },
+      open() { select.focus(); },
+      close() {},
+      position() {},
+      setDisabled(disabled) { select.disabled = disabled; },
+      destroy() { delete host.selectControl; },
+    };
+    select.addEventListener('change', () => onChange(select.value));
+    host.selectControl = control;
+    return control;
+  }
+
   host.innerHTML = `<input type="hidden"><div class="search-select-control"><input type="text" class="search-select-input" role="combobox" autocomplete="off" spellcheck="false" aria-autocomplete="list" aria-expanded="false" aria-controls="${identifier}"><button type="button" class="select-toggle" tabindex="-1">${icon('chevron')}</button></div><div id="${identifier}" class="search-select-list" role="listbox" popover="manual"></div>`;
   const hidden = host.querySelector('input[type=hidden]');
   const input = host.querySelector('[role=combobox]');
