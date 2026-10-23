@@ -5988,7 +5988,9 @@ dialog:not(.more-dialog) .dialog-card {
 @media (max-width: 760px) {
   .search-select-native {
     min-height: 44px;
-    font-size: 16px;
+    font-family: inherit;
+    font-size: var(--control-font-size);
+    line-height: 1.25;
   }
 
   dialog:not(.more-dialog),
